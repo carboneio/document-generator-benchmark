@@ -37,6 +37,7 @@ yarn-error.log*
 .cache/
 .tmp/
 node_modules/
+results/*
 
 # LibreOffice lock files
 .~lock.*#
