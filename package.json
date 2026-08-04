@@ -1,0 +1,17 @@
+{
+  "name": "carbone-benchmark",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Performance benchmark of the Carbone document generator: merge only vs PDF conversion (LibreOffice, OnlyOffice, Chromium) with 1 or 4 CPU",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "bench": "node bench/run.mjs",
+    "bench:quick": "node bench/run.mjs --duration 10s --cooldown 1",
+    "matrix": "node bench/matrix.mjs",
+    "plan": "node bench/run.mjs --dry-run",
+    "report": "node bench/report.mjs"
+  }
+}

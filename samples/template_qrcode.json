@@ -1,0 +1,83 @@
+[
+  {
+    "user": {
+      "id": "0163180815728",
+      "name": "Whistlestop",
+      "firstname": "Ellie",
+      "category": "ADULTE"
+    },
+    "travel": {
+      "folder": "QYYUMN",
+      "ticket": "572089630",
+      "start": "PARIS MONT 1 et 2",
+      "end": "NANTES",
+      "departure": "2017-07-23T19:40:00.000Z",
+      "arrival": "2017-07-23T21:54:00.000Z",
+      "period": "BLANCHE",
+      "price": "80.20",
+      "devise": "EUR",
+      "train": "TGV",
+      "number": "8851",
+      "car": "13",
+      "seat": "16",
+      "class": "1e",
+      "type": "CLUB 4",
+      "side": "FENETRE",
+      "comments": "Présenter carte ENFANT+ - ECH/REMB sous conditions - E-Billet valable uniquement sur ce train"
+    }
+  },
+  {
+    "user": {
+      "id": "0163180815722",
+      "name": "Trackfield",
+      "firstname": "Finn",
+      "category": "ADULTE"
+    },
+    "travel": {
+      "folder": "QYYUMN",
+      "ticket": "572089626",
+      "start": "PARIS MONT 1 et 2",
+      "end": "NANTES",
+      "departure": "2017-07-23T19:40:00.000Z",
+      "arrival": "2017-07-23T21:54:00.000Z",
+      "period": "BLANCHE",
+      "price": "80.20",
+      "devise": "EUR",
+      "train": "TGV",
+      "number": "8851",
+      "car": "13",
+      "seat": "12",
+      "class": "1e",
+      "type": "CLUB 4",
+      "side": "COULOIR",
+      "comments": "Présenter carte ENFANT+ - ECH/REMB sous conditions - E-Billet valable uniquement sur ce train"
+    }
+  },
+  {
+    "user": {
+      "id": "0163180815720",
+      "name": "Trackfield",
+      "firstname": "Milo",
+      "category": "ENFANT"
+    },
+    "travel": {
+      "folder": "QYYUMN",
+      "ticket": "572089641",
+      "start": "PARIS MONT 1 et 2",
+      "end": "NANTES",
+      "departure": "2017-07-23T19:40:00.000Z",
+      "arrival": "2017-07-23T21:54:00.000Z",
+      "period": "BLANCHE",
+      "price": "0.00",
+      "devise": "EUR",
+      "train": "TGV",
+      "number": "8851",
+      "car": "13",
+      "seat": "15",
+      "class": "1e",
+      "type": "CLUB 4",
+      "side": "COULOIR",
+      "comments": "Présenter carte ENFANT+ - GRATUIT -4ans - E-Billet valable uniquement sur ce train"
+    }
+  }
+]

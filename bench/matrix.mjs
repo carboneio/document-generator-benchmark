@@ -1,0 +1,201 @@
+/**
+ * Sample discovery and benchmark matrix definition.
+ *
+ * A "sample" is a template file in `samples/` optionally paired with a JSON data
+ * file of the same basename (template_invoice.docx + template_invoice.json).
+ *
+ * For every sample, the matrix contains:
+ *   - one run without conversion (Carbone only merges the data into the template)
+ *   - one run per relevant PDF converter:
+ *       office templates -> LibreOffice (L) and OnlyOffice (O)
+ *       web templates    -> Chromium (C)
+ * ... each of them repeated for every requested number of Carbone factories (CPU).
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+export const ROOT_DIR = path.resolve(HERE, '..');
+export const SAMPLES_DIR = path.join(ROOT_DIR, 'samples');
+
+export const CONVERTER_NAMES = { L: 'LibreOffice', O: 'OnlyOffice', C: 'Chromium' };
+
+export const MIME_TYPES = {
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  odt: 'application/vnd.oasis.opendocument.text',
+  ods: 'application/vnd.oasis.opendocument.spreadsheet',
+  odp: 'application/vnd.oasis.opendocument.presentation',
+  html: 'text/html',
+  htm: 'text/html',
+  md: 'text/markdown',
+  txt: 'text/plain',
+  xml: 'application/xml',
+  pdf: 'application/pdf',
+};
+
+/** Templates converted to PDF by LibreOffice or OnlyOffice. */
+const OFFICE_EXT = new Set(['docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp']);
+/** Templates converted to PDF by Chromium. */
+const WEB_EXT = new Set(['html', 'htm', 'md', 'txt', 'xml']);
+
+export const TEMPLATE_EXT = new Set([...OFFICE_EXT, ...WEB_EXT]);
+
+export function pdfConverters (ext) {
+  if (OFFICE_EXT.has(ext)) {
+    return ['L', 'O'];
+  }
+  if (WEB_EXT.has(ext)) {
+    return ['C'];
+  }
+  return [];
+}
+
+/** `template_incoice_simple.docx` -> `incoice_simple` */
+function sampleName (basename) {
+  return basename.replace(/^(template|sample)[-_]/i, '') || basename;
+}
+
+export function discoverSamples (dir = SAMPLES_DIR) {
+  if (fs.existsSync(dir) === false) {
+    throw new Error(`Samples directory not found: ${dir}`);
+  }
+
+  const samples = [];
+
+  for (const filename of fs.readdirSync(dir).sort()) {
+    // Skip dotfiles, LibreOffice lock files and other editor leftovers
+    if (filename.startsWith('.') === true || filename.startsWith('~') === true) {
+      continue;
+    }
+
+    const ext = path.extname(filename).slice(1).toLowerCase();
+
+    if (TEMPLATE_EXT.has(ext) === false) {
+      continue;
+    }
+
+    const basename = path.basename(filename, path.extname(filename));
+    const dataPath = path.join(dir, `${basename}.json`);
+    const hasData = fs.existsSync(dataPath);
+
+    samples.push({
+      id           : `${sampleName(basename)}_${ext}`,
+      name         : sampleName(basename),
+      ext          : ext,
+      mime         : MIME_TYPES[ext] || 'application/octet-stream',
+      templateFile : filename,
+      templatePath : path.join(dir, filename),
+      dataFile     : hasData === true ? `${basename}.json` : null,
+      dataPath     : hasData === true ? dataPath : null,
+    });
+  }
+
+  return samples;
+}
+
+function describe (sample, converter, cpu) {
+  const from = sample.ext.toUpperCase();
+  const to = converter === null ? from : 'PDF';
+  const how = converter === null ? 'merge only' : CONVERTER_NAMES[converter];
+
+  return `${sample.name} ${from} → ${to} (${how}) / ${cpu} CPU`;
+}
+
+/**
+ * @param  {Object}  options.samples  output of discoverSamples()
+ * @param  {Array}   options.cpus     list of factory counts, ex: [1, 4]
+ * @return {Array}   one entry per benchmark run, grouped by CPU count
+ */
+export function buildMatrix ({ samples, cpus }) {
+  const runs = [];
+
+  for (const cpu of cpus) {
+    for (const sample of samples) {
+      const converters = [null, ...pdfConverters(sample.ext)];
+
+      for (const converter of converters) {
+        const convertTo = converter === null ? null : 'pdf';
+        const suffix = converter === null ? 'native' : `pdf-${converter}`;
+
+        runs.push({
+          id            : `${sample.id}_${suffix}_${cpu}cpu`,
+          label         : describe(sample, converter, cpu),
+          sampleId      : sample.id,
+          sampleName    : sample.name,
+          templateFile  : sample.templateFile,
+          templatePath  : sample.templatePath,
+          templateExt   : sample.ext,
+          mime          : sample.mime,
+          dataFile      : sample.dataFile,
+          dataPath      : sample.dataPath,
+          cpu           : cpu,
+          convertTo     : convertTo,
+          outputExt     : convertTo === null ? sample.ext : convertTo,
+          converter     : converter,
+          converterName : converter === null ? 'none' : CONVERTER_NAMES[converter],
+          group         : converter === null ? 'merge' : converter,
+          groupLabel    : converter === null ? 'Merge only (no conversion)' : `PDF via ${CONVERTER_NAMES[converter]}`,
+        });
+      }
+    }
+  }
+
+  return runs;
+}
+
+/** Exact JSON body sent to `POST /render/template`, built once and reused by k6. */
+export function buildPayload (run) {
+  const template = fs.readFileSync(run.templatePath);
+  const data = run.dataPath === null ? {} : JSON.parse(fs.readFileSync(run.dataPath, 'utf8'));
+
+  const body = {
+    data     : data,
+    template : `data:${run.mime};base64,${template.toString('base64')}`,
+  };
+
+  if (run.convertTo !== null) {
+    body.convertTo = run.convertTo;
+    body.converter = run.converter;
+  }
+
+  return JSON.stringify(body);
+}
+
+/** Cheap sanity check on a generated document, used during warmup. */
+export function looksValid (buffer, outputExt) {
+  if (buffer.length < 64) {
+    return false;
+  }
+
+  const head = buffer.subarray(0, 5).toString('latin1');
+
+  if (outputExt === 'pdf') {
+    return head.startsWith('%PDF');
+  }
+  if (OFFICE_EXT.has(outputExt) === true) {
+    return head.startsWith('PK');
+  }
+
+  return true;
+}
+
+// `node bench/matrix.mjs [cpus]` prints the planned runs
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const cpus = (process.argv[2] || '1,4').split(',').map(Number);
+  const samples = discoverSamples();
+  const runs = buildMatrix({ samples, cpus });
+
+  console.log(`${samples.length} samples found in ${SAMPLES_DIR}`);
+  for (const sample of samples) {
+    console.log(`  - ${sample.templateFile} + ${sample.dataFile ?? '(no data, {} is used)'}`);
+  }
+  console.log(`\n${runs.length} runs planned:`);
+  for (const run of runs) {
+    console.log(`  - ${run.id.padEnd(38)} ${run.label}`);
+  }
+}

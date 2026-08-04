@@ -1,0 +1,43 @@
+# Personal/private files
+0perso/
+
+# Output files
+output*.pdf
+*.pdf
+!sample*.pdf
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+.tmp/
+node_modules/
+
+# LibreOffice lock files
+.~lock.*#
+
