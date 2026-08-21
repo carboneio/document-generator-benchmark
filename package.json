@@ -2,7 +2,7 @@
   "name": "carbone-benchmark",
   "version": "1.0.0",
   "private": true,
-  "description": "Performance benchmark of the Carbone document generator: merge only vs PDF conversion (LibreOffice, OnlyOffice, Chromium) with 1 or 4 CPU",
+  "description": "Performance benchmark of the Carbone document generator: merge only vs PDF conversion (Carbone ICE, LibreOffice, OnlyOffice, Chromium) with 1 or 4 CPU",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=18"

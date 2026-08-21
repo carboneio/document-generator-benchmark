@@ -4,10 +4,11 @@
  *
  * For each requested number of Carbone factories (CPU), it starts a Carbone
  * container, then runs every sample of the matrix through k6 (merge only, and
- * PDF conversion with LibreOffice / OnlyOffice / Chromium), and finally writes
- * one JSON result per run plus the chart, the table and the CSV.
+ * PDF conversion with LibreOffice / OnlyOffice / Carbone ICE / Chromium),
+ * at each requested concurrency, and finally writes one JSON result per run
+ * plus the charts, the tables and the CSV.
  *
- *   node bench/run.mjs                       full benchmark (1 and 4 CPU)
+ *   node bench/run.mjs                       full benchmark (1 and 4 CPU, 10 VU)
  *   node bench/run.mjs --duration 10s        quick check
  *   node bench/run.mjs --cpus 4 --no-docker  use a Carbone server you started yourself
  *   node bench/run.mjs --dry-run             only print what would be executed
@@ -15,19 +16,21 @@
 
 import fs from 'node:fs';
 import http from 'node:http';
-import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { buildMatrix, buildPayload, discoverSamples, looksValid, ROOT_DIR } from './matrix.mjs';
 import { generateReport } from './report.mjs';
 
+const PREVIEWS_DIR = path.join(ROOT_DIR, 'docs', 'previews');
+
 const DEFAULTS = {
-  image     : 'carbone/carbone-ee:full-5.12.0',
+  image     : 'carbone/carbone-ee:full-5.14.0',
   container : 'carbone-bench',
   port      : 4000,
   cpus      : '1,4',
-  vus       : 5,
+  vus       : '10',
   duration  : '30s',
   warmup    : 3,
   warmupRetries : 3,
@@ -43,7 +46,7 @@ function parseArgs (argv) {
     container  : process.env.CARBONE_CONTAINER || DEFAULTS.container,
     port       : Number(process.env.CARBONE_PORT || DEFAULTS.port),
     cpus       : String(process.env.CARBONE_CPUS || DEFAULTS.cpus),
-    vus        : Number(process.env.CARBONE_VUS || DEFAULTS.vus),
+    vus        : String(process.env.CARBONE_VUS || DEFAULTS.vus),
     duration   : process.env.CARBONE_DURATION || DEFAULTS.duration,
     warmup     : Number(process.env.CARBONE_WARMUP ?? DEFAULTS.warmup),
     cooldown   : Number(process.env.CARBONE_COOLDOWN ?? DEFAULTS.cooldown),
@@ -76,7 +79,7 @@ function parseArgs (argv) {
       case '--container':    options.container = next(); break;
       case '--port':         options.port = Number(next()); break;
       case '--cpus':         options.cpus = next(); break;
-      case '--vus':          options.vus = Number(next()); break;
+      case '--vus':          options.vus = next(); break;
       case '--duration':     options.duration = next(); break;
       case '--warmup':       options.warmup = Number(next()); break;
       case '--warmup-retries': options.warmupRetries = Number(next()); break;
@@ -101,6 +104,11 @@ function parseArgs (argv) {
   }
 
   options.cpuList = options.cpus.split(',').map((value) => Number(value.trim())).filter(Boolean);
+  options.vuList = String(options.vus).split(',').map((value) => Number(value.trim())).filter(Boolean);
+
+  if (options.vuList.length === 0) {
+    throw new Error('--vus must be a positive number, ex: 10');
+  }
 
   return options;
 }
@@ -110,7 +118,7 @@ Usage: node bench/run.mjs [options]
 
   --cpus <list>       Carbone factories to benchmark            (default ${DEFAULTS.cpus})
   --duration <time>   k6 duration per run                       (default ${DEFAULTS.duration})
-  --vus <number>      concurrent virtual users                   (default ${DEFAULTS.vus})
+  --vus <n>           concurrent virtual users                   (default ${DEFAULTS.vus})
   --filter <text>     only run matrix entries matching <text>
   --image <image>     Carbone docker image                       (default ${DEFAULTS.image})
   --port <port>       host port bound to the container           (default ${DEFAULTS.port})
@@ -239,25 +247,38 @@ const indent = (text) => text.split('\n').map((line) => `    ${line}`).join('\n'
 /** Network level failure, as opposed to Carbone answering with an HTTP error. */
 const looksLikeCrash = (message) => /socket hang up|ECONNRESET|ECONNREFUSED|EPIPE|no answer after/i.test(message);
 
-/** Resolves to null when the port accepts connections, to an error label otherwise. */
-function probePort (port, timeoutMs = 3000) {
+/** Resolves to null when GET /status returns 200, to an error label otherwise. */
+function probeStatus (port, timeoutMs = 3000) {
   return new Promise((resolve) => {
-    const socket = net.connect({ host: '127.0.0.1', port: port });
-    const finish = (result) => {
-      socket.destroy();
-      resolve(result);
-    };
+    const request = http.request({
+      host   : '127.0.0.1',
+      port   : port,
+      method : 'GET',
+      path   : '/status',
+      agent  : false,
+    }, (response) => {
+      response.resume();
 
-    socket.setTimeout(timeoutMs);
-    socket.once('connect', () => finish(null));
-    socket.once('timeout', () => finish('connection timed out'));
-    socket.once('error', (error) => finish(error.code || error.message));
+      if (response.statusCode === 200) {
+        resolve(null);
+        return;
+      }
+
+      resolve(`GET /status → HTTP ${response.statusCode}`);
+    });
+
+    request.setTimeout(timeoutMs, () => {
+      request.destroy();
+      resolve('GET /status timed out');
+    });
+    request.on('error', (error) => resolve(error.code || error.message));
+    request.end();
   });
 }
 
 /**
- * Waits until the published port accepts TCP connections, which is exactly what
- * "the web server is listening" means — no HTTP route or status code involved.
+ * Waits until Carbone answers GET /status with 200, not just until the port is open.
+ * The HTTP server can accept TCP before factories are ready; rendering then hits ECONNRESET.
  */
 async function waitForServer (options) {
   const deadline = Date.now() + options.startupTimeout * 1000;
@@ -265,13 +286,13 @@ async function waitForServer (options) {
   let lastError = 'not attempted';
   let notified = -1;
 
-  log(`  waiting for 127.0.0.1:${options.port} to accept connections (up to ${options.startupTimeout}s)`);
+  log(`  waiting for GET http://127.0.0.1:${options.port}/status → 200 (up to ${options.startupTimeout}s)`);
 
   while (Date.now() < deadline) {
-    lastError = await probePort(options.port);
+    lastError = await probeStatus(options.port);
 
     if (lastError === null) {
-      log(`  ready after ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+      log(`  ready after ${((Date.now() - startedAt) / 1000).toFixed(1)}s (GET /status 200)`);
       return;
     }
 
@@ -298,8 +319,8 @@ async function waitForServer (options) {
   }
 
   throw new Error([
-    `Carbone did not accept connections on 127.0.0.1:${options.port} after ${options.startupTimeout}s.`,
-    `Last connection error: ${lastError}`,
+    `Carbone did not answer GET /status with 200 on 127.0.0.1:${options.port} after ${options.startupTimeout}s.`,
+    `Last error: ${lastError}`,
     '',
     `Check by hand with: curl -v http://127.0.0.1:${options.port}/status`,
     'If your browser reaches Carbone on another host or port, pass --port <port>.',
@@ -409,6 +430,185 @@ async function warmup (options, run, payload) {
 const RENDER_PATH = '/render/template?download=true';
 const renderUrl = (options) => `http://127.0.0.1:${options.port}${RENDER_PATH}`;
 
+function firstImageFromZip (buffer) {
+  let offset = 0;
+
+  while (offset < buffer.length - 30 && buffer.readUInt32LE(offset) === 0x04034b50) {
+    const method = buffer.readUInt16LE(offset + 8);
+    const compSize = buffer.readUInt32LE(offset + 18);
+    const nameLen = buffer.readUInt16LE(offset + 26);
+    const extraLen = buffer.readUInt16LE(offset + 28);
+    const name = buffer.subarray(offset + 30, offset + 30 + nameLen).toString('utf8');
+    const dataStart = offset + 30 + nameLen + extraLen;
+    const data = buffer.subarray(dataStart, dataStart + compSize);
+
+    if (/\.(jpe?g|png)$/i.test(name) === true) {
+      if (method === 0) {
+        return Buffer.from(data);
+      }
+      if (method === 8) {
+        return zlib.inflateRawSync(data);
+      }
+    }
+
+    offset = dataStart + compSize;
+  }
+
+  return null;
+}
+
+function asJpeg (buffer) {
+  if (looksValid(buffer, 'jpg') === true) {
+    return buffer;
+  }
+
+  if (buffer.subarray(0, 2).toString('latin1') === 'PK') {
+    return firstImageFromZip(buffer);
+  }
+
+  return null;
+}
+
+function isTransientRenderError (error) {
+  return /ECONNRESET|ECONNREFUSED|EPIPE|ECONNABORTED|socket hang up|ETIMEDOUT|no answer/i.test(error.message || '');
+}
+
+function previewPayload (run, converter) {
+  const template = fs.readFileSync(run.templatePath);
+  const data = run.dataPath === null ? {} : JSON.parse(fs.readFileSync(run.dataPath, 'utf8'));
+
+  return JSON.stringify({
+    data      : data,
+    template  : `data:${run.mime};base64,${template.toString('base64')}`,
+    convertTo : {
+      formatName    : 'jpg',
+      formatOptions : { PageRange: '1', Quality: 82 },
+    },
+    converter : converter,
+  });
+}
+
+async function postRenderRetry (options, payload, { attempts, timeoutMs, validate, label }) {
+  let lastError = 'no attempt';
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const { status, body } = await postRender(options, payload, timeoutMs);
+
+      if (status !== 200) {
+        lastError = `HTTP ${status} ${body.toString('utf8').slice(0, 200)}`;
+      } else {
+        const value = validate(body);
+
+        if (value !== null) {
+          return value;
+        }
+
+        lastError = `unexpected output (${body.length} bytes)`;
+      }
+    } catch (error) {
+      lastError = error.message;
+
+      if (isTransientRenderError(error) === false) {
+        throw error;
+      }
+    }
+
+    if (attempt < attempts) {
+      log(`    ${label} ${attempt}/${attempts} → ${lastError} (retrying)`);
+      await sleep(2);
+    }
+  }
+
+  throw new Error(lastError);
+}
+
+async function primeLibreOffice (options, run) {
+  const template = fs.readFileSync(run.templatePath);
+  const data = run.dataPath === null ? {} : JSON.parse(fs.readFileSync(run.dataPath, 'utf8'));
+  const payload = JSON.stringify({
+    data      : data,
+    template  : `data:${run.mime};base64,${template.toString('base64')}`,
+    convertTo : 'pdf',
+    converter : 'L',
+  });
+
+  log('  priming LibreOffice with one PDF render');
+  await postRenderRetry(options, payload, {
+    attempts  : Math.max(5, options.warmupRetries + 2),
+    timeoutMs : Math.max(options.requestTimeout, 90) * 1000,
+    label     : 'prime',
+    validate  : (body) => (looksValid(body, 'pdf') === true ? body : null),
+  });
+}
+
+async function generatePreviews (options, runs) {
+  const samples = [];
+  const seen = new Set();
+
+  for (const run of runs) {
+    if (seen.has(run.templateFile) === true) {
+      continue;
+    }
+
+    seen.add(run.templateFile);
+    samples.push(run);
+  }
+
+  fs.mkdirSync(PREVIEWS_DIR, { recursive: true });
+  log(`\nGenerating ${samples.length} template preview${samples.length > 1 ? 's' : ''} (first page → JPG, LibreOffice)`);
+
+  const office = samples.find((run) => run.templateExt !== 'html' && run.templateExt !== 'htm');
+
+  if (office !== undefined) {
+    try {
+      await primeLibreOffice(options, office);
+    } catch (error) {
+      log(`  ⚠ LibreOffice prime failed: ${error.message} (previews will still be retried)`);
+    }
+  }
+
+  const attempts = Math.max(5, options.warmupRetries + 2);
+  const timeoutMs = Math.max(options.requestTimeout, 90) * 1000;
+
+  for (const run of samples) {
+    const dest = path.join(PREVIEWS_DIR, `${run.templateFile}.jpg`);
+    const legacy = path.join(PREVIEWS_DIR, `${run.templateFile}.png`);
+    const converters = (run.templateExt === 'html' || run.templateExt === 'htm')
+      ? ['L', 'C']
+      : ['L'];
+    let saved = false;
+    let lastError = 'no attempt';
+
+    for (const converter of converters) {
+      try {
+        const jpeg = await postRenderRetry(options, previewPayload(run, converter), {
+          attempts  : attempts,
+          timeoutMs : timeoutMs,
+          label     : `${run.templateFile} (${converter})`,
+          validate  : asJpeg,
+        });
+
+        fs.writeFileSync(dest, jpeg);
+
+        if (fs.existsSync(legacy) === true) {
+          fs.rmSync(legacy);
+        }
+
+        log(`  ${run.templateFile} → ${path.relative(ROOT_DIR, dest)} (${(jpeg.length / 1024).toFixed(1)} KB, ${converter})`);
+        saved = true;
+        break;
+      } catch (error) {
+        lastError = error.message;
+      }
+    }
+
+    if (saved === false) {
+      log(`  ⚠ ${run.templateFile}: ${lastError}`);
+    }
+  }
+}
+
 /* --------------------------------------------------------------------- k6 */
 
 function runK6 (options, run, payloadPath, summaryPath) {
@@ -422,7 +622,7 @@ function runK6 (options, run, payloadPath, summaryPath) {
       CARBONE_SUMMARY  : summaryPath,
       CARBONE_URL      : renderUrl(options),
       CARBONE_LABEL    : run.label,
-      CARBONE_VUS      : String(options.vus),
+      CARBONE_VUS      : String(run.vus),
       CARBONE_DURATION : options.duration,
     },
   });
@@ -454,7 +654,7 @@ async function main () {
   }
 
   const samples = discoverSamples();
-  let runs = buildMatrix({ samples, cpus: options.cpuList });
+  let runs = buildMatrix({ samples, cpus: options.cpuList, vus: options.vuList });
 
   if (options.filter !== '') {
     const needle = options.filter.toLowerCase();
@@ -474,7 +674,7 @@ async function main () {
   log(`  endpoint ...... ${renderUrl(options)}`);
   log(`  factories ..... ${options.cpuList.join(', ')} CPU`);
   log(`  license ....... ${describeLicense(options)}`);
-  log(`  load .......... ${options.vus} VUs during ${options.duration} per run`);
+  log(`  load .......... ${options.vuList.join(', ')} VU during ${options.duration} per run`);
   log(`  samples ....... ${samples.length}`);
   log(`  runs .......... ${runs.length} (~${Math.ceil(runs.length * (parseDuration(options.duration) + options.cooldown + 5) / 60)} min)`);
   log('');
@@ -502,7 +702,7 @@ async function main () {
     startedAt : new Date().toISOString(),
     image     : options.docker === true ? options.image : 'unknown (docker not managed by the runner)',
     license   : describeLicense(options),
-    vus       : options.vus,
+    vus       : options.vuList,
     duration  : options.duration,
     cpus      : options.cpuList,
     k6        : k6Version,
@@ -525,9 +725,15 @@ async function main () {
 
   const results = [];
   let currentCpu = null;
+  const warmed = new Set();
+  const warmupKey = (run) => `${run.sampleId}|${run.converter}|${run.cpu}`;
+
+  let previewsDone = false;
 
   if (options.docker === false) {
     await waitForServer(options);
+    await generatePreviews(options, runs);
+    previewsDone = true;
   }
 
   try {
@@ -537,6 +743,11 @@ async function main () {
         await waitForServer(options);
 
         currentCpu = run.cpu;
+
+        if (previewsDone === false) {
+          await generatePreviews(options, runs);
+          previewsDone = true;
+        }
       }
 
       log(`\n${'─'.repeat(72)}`);
@@ -548,7 +759,13 @@ async function main () {
 
       fs.writeFileSync(payloadPath, payload);
 
-      const warmupError = await warmup(options, run, payload);
+      let warmupError = null;
+
+      if (warmed.has(warmupKey(run)) === true) {
+        log(`  warmup already done for this pipeline`);
+      } else {
+        warmupError = await warmup(options, run, payload);
+      }
 
       if (warmupError !== null) {
         log(`  ⚠ skipped: ${warmupError}`);
@@ -576,6 +793,8 @@ async function main () {
 
         continue;
       }
+
+      warmed.add(warmupKey(run));
 
       const summary = runK6(options, run, payloadPath, path.join(tmpDir, `${run.id}.summary.json`));
 
@@ -631,11 +850,15 @@ function runMeta (run) {
   return {
     id            : run.id,
     label         : run.label,
+    vendor        : run.vendor,
     sample        : run.sampleName,
+    family        : run.family,
+    pages         : run.pages,
     templateFile  : run.templateFile,
     templateExt   : run.templateExt,
     dataFile      : run.dataFile,
     cpu           : run.cpu,
+    vus           : run.vus,
     convertTo     : run.convertTo,
     converter     : run.converter,
     converterName : run.converterName,

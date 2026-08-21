@@ -4,9 +4,9 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Benchmark](https://img.shields.io/badge/benchmark-k6-orange.svg)](https://k6.io)
-[![Carbone](https://img.shields.io/badge/carbone-5.12.0-A644C5.svg)](https://carbone.io)
+[![Carbone](https://img.shields.io/badge/carbone-5.14.0-A644C5.svg)](https://carbone.io)
 
-This repository measures the throughput and the latency of [**Carbone**](https://carbone.io) on a matrix of real document generation jobs. For every template of the [`samples/`](samples) folder, Carbone merges a JSON dataset into the template and, optionally, converts the result to PDF — with **1** or **4** conversion workers.
+This repository measures the throughput and the latency of [**Carbone**](https://carbone.io) on a matrix of real document generation jobs. For every template of the [`samples/`](samples) folder, Carbone merges a JSON dataset into the template and, optionally, converts the result to PDF — with **1** or **4** conversion workers, and **10** concurrent users by default. HTML and DOCX are reported separately: their throughputs are not comparable.
 
 Everything is reproducible with a single command: `npm run bench`.
 
@@ -14,38 +14,22 @@ Everything is reproducible with a single command: `npm run bench`.
 
 ## 🎯 Results
 
-![Benchmark results](result.svg)
+The public report is a **dated static HTML page**: one summary, then one section per template. Each template shows two modes: **Merge only** (same format) and **Convert to PDF**. Converters compete on that template only. 1 CPU vs 4 CPU is a scaling table, not a race. HTML and DOCX stay apart.
 
-<!-- BENCHMARK:TABLE:START -->
-| Sample | Template | Output | Converter | CPU | Avg latency | p95 | Throughput (RPS) |
-| ------ | -------- | ------ | --------- | --- | ----------- | --- | ---------------- |
-| `incoice_simple` | HTML | HTML | — | 1 | 4.76ms | 5.81ms | **1026.34** |
-| `incoice_simple` | HTML | HTML | — | 4 | 4.84ms | 5.87ms | **1007.42** |
-| `incoice_simple` | HTML | PDF | Chromium | 4 | 14.18ms | 16.91ms | **348.82** |
-| `incoice_simple` | DOCX | DOCX | — | 1 | 20.21ms | 24.06ms | **245.31** |
-| `incoice_simple` | DOCX | DOCX | — | 4 | 21.25ms | 25.39ms | **233.37** |
-| `chart` | DOCX | DOCX | — | 1 | 35.49ms | 42.04ms | **140.13** |
-| `chart` | DOCX | DOCX | — | 4 | 36.46ms | 43.13ms | **136.43** |
-| `incoice_simple` | HTML | PDF | Chromium | 1 | 39.93ms | 42.88ms | **124.60** |
-| `incoice_simple` | DOCX | PDF | LibreOffice | 4 | 50.13ms | 58.61ms | **99.28** |
-| `qrcode` | DOCX | DOCX | — | 1 | 73.01ms | 89.92ms | **68.31** |
-| `qrcode` | DOCX | DOCX | — | 4 | 74.68ms | 95.12ms | **66.77** |
-| `qrcode` | DOCX | PDF | LibreOffice | 4 | 93.46ms | 108.47ms | **53.35** |
-| `chart` | DOCX | PDF | LibreOffice | 4 | 136.92ms | 183.85ms | **36.38** |
-| `incoice_simple` | DOCX | PDF | LibreOffice | 1 | 166.20ms | 176.10ms | **29.98** |
-| `qrcode` | DOCX | PDF | LibreOffice | 1 | 288.45ms | 300.58ms | **17.26** |
-| `incoice_simple` | DOCX | PDF | OnlyOffice | 4 | 299.73ms | 401.94ms | **16.60** |
-| `qrcode` | DOCX | PDF | OnlyOffice | 4 | 405.05ms | 540.17ms | **12.26** |
-| `chart` | DOCX | PDF | LibreOffice | 1 | 514.57ms | 539.20ms | **9.65** |
-| `chart` | DOCX | PDF | OnlyOffice | 4 | 639.51ms | 939.78ms | **7.73** |
-| `incoice_simple` | DOCX | PDF | OnlyOffice | 1 | 1130.00ms | 1173.30ms | **4.36** |
-| `qrcode` | DOCX | PDF | OnlyOffice | 1 | 1516.16ms | 1575.93ms | **3.23** |
-| `chart` | DOCX | PDF | OnlyOffice | 1 | 2345.92ms | 2466.80ms | **2.07** |
+Latest: [docs/index.html](docs/index.html) · [previous benchmarks](docs/index.html#history)
 
-_22 configurations measured with 5 VUs during 30s each, on `carbone/carbone-ee:full-5.12.0`. Full details in [RESULT.md](RESULT.md)._
-<!-- BENCHMARK:TABLE:END -->
+<!-- BENCHMARK:RESULTS:START -->
+Latest report: **[2026-08-21 22:44:27 UTC](docs/index.html)** · [previous benchmarks](docs/index.html#history)
 
-Raw k6 metrics of every run: [RESULT.md](RESULT.md) · machine readable: [`results/results.csv`](results).
+| Template sample | Merge only @ 4 CPU (RPS) | Convert to PDF @ 4 CPU (RPS) |
+| --------------- | --------------------------- | ------------------------------- |
+| [`financial_chart`](docs/index.html#financial-chart-docx-1) | DOCX → DOCX **146.8** | **125.5** · DOCX → PDF (fastest: Carbone ICE) |
+| [`invoice_simple`](docs/index.html#invoice-simple-docx-1) | DOCX → DOCX **244.9** | **174.2** · DOCX → PDF (fastest: Carbone ICE) |
+| [`ticket_qrcode`](docs/index.html#ticket-qrcode-docx-1) | DOCX → DOCX **62.7** | **60.1** · DOCX → PDF (fastest: Carbone ICE) |
+| [`invoice_simple`](docs/index.html#invoice-simple-html-1) | HTML → HTML **1024.3** | **332.5** · HTML → PDF (fastest: Chromium) |
+<!-- BENCHMARK:RESULTS:END -->
+
+Raw k6 metrics of the latest campaign: [RESULT.md](RESULT.md). The HTML pages in [`docs/`](docs) are meant to be committed (dated snapshot + `index.html`).
 
 ---
 
@@ -56,6 +40,7 @@ Each sample is a **template + JSON data** pair. Carbone always merges the data i
 | Pipeline | `convertTo` | `converter` | Engine |
 | -------- | ----------- | ----------- | ------ |
 | Merge only (DOCX → DOCX, HTML → HTML) | – | – | Carbone template engine only |
+| DOCX → PDF | `pdf` | `I` | Carbone ICE (Instant Converter Engine, since 5.14.0) |
 | Office template → PDF | `pdf` | `L` | LibreOffice |
 | Office template → PDF | `pdf` | `O` | OnlyOffice |
 | Web template → PDF | `pdf` | `C` | Chromium |
@@ -63,10 +48,11 @@ Each sample is a **template + JSON data** pair. Carbone always merges the data i
 The matrix is the cartesian product of:
 
 - **the samples** found in `samples/` (auto-discovered)
-- **the pipelines** relevant to the template format (office templates get LibreOffice *and* OnlyOffice, web templates get Chromium)
+- **the pipelines** relevant to the template format (DOCX gets LibreOffice, OnlyOffice *and* Carbone ICE; other office templates get LibreOffice and OnlyOffice; web templates get Chromium)
 - **the number of Carbone factories**: `1` and `4` (`carbone webserver -f <n>`, one worker per CPU)
+- **the concurrency**: `10` k6 virtual users by default (`--vus` to change it)
 
-With the samples currently committed, that is **26 runs**. Print the plan without running anything:
+With the samples currently committed, that is **28 runs**. Print the plan without running anything:
 
 ```bash
 npm run plan
@@ -76,13 +62,22 @@ npm run plan
 
 | Template | Data | Formats benchmarked |
 | -------- | ---- | ------------------- |
-| `template_incoice_simple.docx` | `template_incoice_simple.json` | merge only, PDF (LibreOffice), PDF (OnlyOffice) |
+| `template_incoice_simple.docx` | `template_incoice_simple.json` | merge only, PDF (LibreOffice, OnlyOffice, Carbone ICE) |
 | `template_incoice_simple.html` | `template_incoice_simple.json` | merge only, PDF (Chromium) |
-| `template_chart.docx` | `template_chart.json` | merge only, PDF (LibreOffice), PDF (OnlyOffice) |
-| `template_qrcode.docx` | `template_qrcode.json` | merge only, PDF (LibreOffice), PDF (OnlyOffice) |
-| `sample_text.html` | – (no data file, `{}` is sent) | merge only, PDF (Chromium) |
+| `template_chart.docx` | `template_chart.json` | merge only, PDF (LibreOffice, OnlyOffice, Carbone ICE) |
+| `template_qrcode.docx` | `template_qrcode.json` | merge only, PDF (LibreOffice, OnlyOffice, Carbone ICE) |
 
 Adding a sample requires **no code change**: drop `my_template.docx` and `my_template.json` into `samples/` and they are picked up on the next run. A template without a matching `.json` is rendered with an empty dataset.
+
+To benchmark the **same template at several sizes** (1 / 100 / 1000 pages), suffix the basename with `_100p` or `_1000p`:
+
+```
+template_invoice.docx      + template_invoice.json        → 1 page
+template_invoice_100p.docx + template_invoice_100p.json   → 100 pages
+template_invoice_1000p.docx + template_invoice_1000p.json → 1000 pages
+```
+
+The report groups them as one family and labels the page count. They are never mixed on the same converter chart.
 
 ---
 
@@ -114,7 +109,7 @@ choco install k6
 npm run bench
 ```
 
-The runner does everything: it starts `carbone/carbone-ee:full-5.12.0` with `-f 1`, plays all the samples, restarts the container with `-f 4`, plays them again, removes the container, then writes the chart, the tables and the CSV.
+The runner does everything: it starts `carbone/carbone-ee:full-5.14.0` with `-f 1`, plays all the samples, restarts the container with `-f 4`, plays them again, removes the container, then writes one chart and one table per source template type, plus the CSV.
 
 The container is started with the same command as the [manual one](#-running-carbone-by-hand), only detached and named: `docker run -d --name carbone-bench -p 4000:4000 <image> webserver -s -f <n>`. Extra flags are opt-in (`--env`, `--shm-size`, `--docker-cpus`), and the exact command is printed before each start.
 
@@ -123,17 +118,17 @@ The container is started with the same command as the [manual one](#-running-car
 If you prefer to control the container (custom flags, remote server, debugging), start it and point the runner at it with `--no-docker`. One factory count per server, since the runner cannot restart it:
 
 ```bash
-docker run -t -i --rm -p 4000:4000 carbone/carbone-ee:full-5.12.0 webserver -s -f 4
+docker run -t -i --rm -p 4000:4000 carbone/carbone-ee:full-5.14.0 webserver -s -f 4
 node bench/run.mjs --no-docker --cpus 4
 ```
 
 Both modes write to the same `results/` folder, so you can run `--cpus 1` and `--cpus 4` in two passes and still get one complete report.
 
-Expect roughly **20 minutes** with the default settings (26 runs × 30s + warmups + container restarts).
+Expect roughly **20 minutes** with the default settings (28 runs × 30s + warmups + container restarts).
 
 ```bash
 npm run bench:quick          # same matrix, 10s per run, to validate the setup first
-npm run report               # rebuild result.svg / RESULT.md / CSV from results/
+npm run report               # rebuild docs/index.html, the dated snapshot, RESULT.md and CSV
 ```
 
 ### Options
@@ -144,9 +139,9 @@ Every option is a CLI flag, or the matching `CARBONE_*` environment variable.
 | ---- | ------------ | ------- | ----------- |
 | `--cpus <list>` | `CARBONE_CPUS` | `1,4` | Number of Carbone factories to benchmark |
 | `--duration <time>` | `CARBONE_DURATION` | `30s` | k6 duration per run |
-| `--vus <n>` | `CARBONE_VUS` | `5` | Concurrent virtual users |
+| `--vus <n>` | `CARBONE_VUS` | `10` | Concurrent virtual users |
 | `--filter <text>` | – | – | Only run matrix entries whose id or label contains `<text>` |
-| `--image <image>` | `CARBONE_IMAGE` | `carbone/carbone-ee:full-5.12.0` | Carbone Docker image |
+| `--image <image>` | `CARBONE_IMAGE` | `carbone/carbone-ee:full-5.14.0` | Carbone Docker image |
 | `--port <port>` | `CARBONE_PORT` | `4000` | Host port bound to the container |
 | `--container <name>` | `CARBONE_CONTAINER` | `carbone-bench` | Container name |
 | `--docker-cpus <n>` | `CARBONE_DOCKER_CPUS` | – | Also cap the container to `n` host CPUs |
@@ -172,8 +167,9 @@ node bench/run.mjs --filter incoice --cpus 4 --duration 1m
 # Benchmark a Carbone server you started yourself on port 4001
 node bench/run.mjs --no-docker --port 4001 --cpus 4
 
-# Compare 1, 2, 4 and 8 factories
+# Compare 1, 2, 4 and 8 factories, or raise the load
 node bench/run.mjs --cpus 1,2,4,8
+node bench/run.mjs --vus 50
 ```
 
 ### Enterprise license
@@ -205,10 +201,10 @@ Useful to check a configuration before launching the whole benchmark.
 
 ```bash
 # 1 worker
-docker run -t -i --rm -p 4000:4000 carbone/carbone-ee:full-5.12.0 webserver -s -f 1
+docker run -t -i --rm -p 4000:4000 carbone/carbone-ee:full-5.14.0 webserver -s -f 1
 
 # 4 workers
-docker run -t -i --rm -p 4000:4000 carbone/carbone-ee:full-5.12.0 webserver -s -f 4
+docker run -t -i --rm -p 4000:4000 carbone/carbone-ee:full-5.14.0 webserver -s -f 4
 ```
 
 ### 2. Generate one document
@@ -224,10 +220,10 @@ curl -s -H 'Content-Type: application/json' \
   -d "{\"data\":${data},\"template\":\"data:${mime};base64,${template}\"}" \
   'http://localhost:4000/render/template?download=true' --output out.docx
 
-# DOCX to PDF with LibreOffice ("L"), or OnlyOffice ("O")
+# DOCX to PDF with LibreOffice ("L"), OnlyOffice ("O"), or Carbone ICE ("I")
 curl -s -H 'Content-Type: application/json' \
-  -d "{\"data\":${data},\"template\":\"data:${mime};base64,${template}\",\"convertTo\":\"pdf\",\"converter\":\"L\"}" \
-  'http://localhost:4000/render/template?download=true' --output out-libreoffice.pdf
+  -d "{\"data\":${data},\"template\":\"data:${mime};base64,${template}\",\"convertTo\":\"pdf\",\"converter\":\"I\"}" \
+  'http://localhost:4000/render/template?download=true' --output out-ice.pdf
 
 # HTML to PDF with Chromium ("C")
 html=$(base64 < template_incoice_simple.html | tr -d '\r\n')
@@ -241,7 +237,7 @@ curl -s -H 'Content-Type: application/json' \
 `bench/carbone-bench.js` reads a ready-made request body, so it can be replayed on its own:
 
 ```bash
-CARBONE_PAYLOAD=./payload.json CARBONE_VUS=5 CARBONE_DURATION=30s k6 run bench/carbone-bench.js
+CARBONE_PAYLOAD=./payload.json CARBONE_VUS=10 CARBONE_DURATION=30s k6 run bench/carbone-bench.js
 ```
 
 ---
@@ -253,7 +249,8 @@ CARBONE_PAYLOAD=./payload.json CARBONE_VUS=5 CARBONE_DURATION=30s k6 run bench/c
 | [`bench/matrix.mjs`](bench/matrix.mjs) | Discovers the samples, builds the run matrix, builds the Carbone request body |
 | [`bench/carbone-bench.js`](bench/carbone-bench.js) | k6 script measuring **one** configuration, exports a JSON summary |
 | [`bench/run.mjs`](bench/run.mjs) | Orchestrator: container lifecycle, warmup, k6 runs, JSON results |
-| [`bench/report.mjs`](bench/report.mjs) | Builds `result.svg`, `RESULT.md`, `results/results.csv` and the table above |
+| [`bench/html.mjs`](bench/html.mjs) | Builds the dated public HTML page (summary + one section per template) |
+| [`bench/report.mjs`](bench/report.mjs) | Writes `docs/<date>.html`, `docs/index.html`, `RESULT.md`, CSV and the README summary |
 | `results/` | One JSON file per run + `index.json` (all runs and the test environment) |
 
 Before measuring, the runner renders each configuration until it gets 3 **valid** documents (a PDF must start with `%PDF`, an office document with `PK`). This spawns the LibreOffice / OnlyOffice / Chromium workers before the load starts.
@@ -266,7 +263,7 @@ The request body is built once by Node and posted verbatim by k6, so no base64 e
 
 ## 📊 Methodology
 
-- **Load tool**: [k6](https://k6.io), 5 virtual users, 30s per configuration (both configurable)
+- **Load tool**: [k6](https://k6.io), 10 virtual users, 30s per configuration (both configurable)
 - **Endpoint**: `POST /render/template?download=true`, the document is generated *and* downloaded in one call
 - **Metrics**: average / median / p90 / p95 / p99 latency, throughput (RPS), failure rate
 - **Warmup**: 3 renders per configuration, excluded from the measures
@@ -275,10 +272,11 @@ The request body is built once by Node and posted verbatim by k6, so no base64 e
 
 The exact environment (host CPU, Docker and k6 versions, image, date) is recorded in `results/index.json` and printed in [RESULT.md](RESULT.md).
 
-> ⚠️ Benchmarks measure a single Carbone container on a single machine. Absolute numbers depend on your hardware; the interesting part is the **relative** cost of each pipeline (merge only vs PDF, LibreOffice vs OnlyOffice vs Chromium, 1 vs 4 workers).
+> ⚠️ Benchmarks measure a single Carbone container on a single machine. Absolute numbers depend on your hardware. The HTML report compares **converters on the same template**; 1 vs 4 CPU is shown as scaling, not as a ranking. A later phase can add competing products as extra engines on the same per-template chart (`vendor` is already on every run).
 
 ### Troubleshooting
 
+- **Carbone ICE rows reported as “not available”**: Carbone ICE requires **5.14.0** or later, and only converts DOCX to PDF. Use `--image carbone/carbone-ee:full-5.14.0` (the default).
 - **OnlyOffice rows reported as “not available”**: the converter is disabled in the image you used. Point Carbone to the binaries with `CARBONE_ONLY_OFFICE_PATH` (`"x2tPath, AllFontsPath, fontPath"`), or use an image that bundles it.
 - **Chromium rows reported as “not available”**: same idea with `CARBONE_CHROME_PATH`.
 - **Container exits during startup**: the runner stops right away and prints the container logs — usually an invalid or expired license, or a port already in use.

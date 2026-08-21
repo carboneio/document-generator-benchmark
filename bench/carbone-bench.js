@@ -11,7 +11,7 @@
  * Environment:
  *   CARBONE_PAYLOAD   path to the JSON body posted to Carbone   (required)
  *   CARBONE_URL       Carbone render endpoint                   (default http://127.0.0.1:4000/render/template?download=true)
- *   CARBONE_VUS       concurrent virtual users                  (default 5)
+ *   CARBONE_VUS       concurrent virtual users                  (default 10)
  *   CARBONE_DURATION  test duration                             (default 30s)
  *   CARBONE_MAX_P95   p(95) latency threshold in ms             (default 10000)
  *   CARBONE_LABEL     human readable name of the run            (default carbone)
@@ -26,7 +26,7 @@ const PAYLOAD  = open(__ENV.CARBONE_PAYLOAD);
 const URL      = __ENV.CARBONE_URL || 'http://127.0.0.1:4000/render/template?download=true';
 const LABEL    = __ENV.CARBONE_LABEL || 'carbone';
 const SUMMARY  = __ENV.CARBONE_SUMMARY || '';
-const VUS      = Number(__ENV.CARBONE_VUS || 5);
+const VUS      = Number(__ENV.CARBONE_VUS || 10);
 const DURATION = __ENV.CARBONE_DURATION || '30s';
 const MAX_P95  = Number(__ENV.CARBONE_MAX_P95 || 10000);
 

@@ -7,9 +7,11 @@
  * For every sample, the matrix contains:
  *   - one run without conversion (Carbone only merges the data into the template)
  *   - one run per relevant PDF converter:
- *       office templates -> LibreOffice (L) and OnlyOffice (O)
+ *       DOCX templates   -> LibreOffice (L), OnlyOffice (O) and Carbone ICE (I)
+ *       other office     -> LibreOffice (L) and OnlyOffice (O)
  *       web templates    -> Chromium (C)
- * ... each of them repeated for every requested number of Carbone factories (CPU).
+ * ... each of them repeated for every requested number of Carbone factories (CPU)
+ * and every requested concurrency (VUs).
  */
 
 import fs from 'node:fs';
@@ -21,7 +23,20 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT_DIR = path.resolve(HERE, '..');
 export const SAMPLES_DIR = path.join(ROOT_DIR, 'samples');
 
-export const CONVERTER_NAMES = { L: 'LibreOffice', O: 'OnlyOffice', C: 'Chromium' };
+export const VENDOR = 'Carbone';
+
+export const CONVERTER_NAMES = { I: 'Carbone ICE', L: 'LibreOffice', O: 'OnlyOffice', C: 'Chromium' };
+
+/** `incoice_simple_100p` -> { family: 'incoice_simple', pages: 100 } */
+export function parseSampleIdentity (name) {
+  const match = /_(\d+)p(?:ages)?$/i.exec(name);
+
+  if (match === null) {
+    return { family: name, pages: 1 };
+  }
+
+  return { family: name.slice(0, match.index) || name, pages: Number(match[1]) };
+}
 
 export const MIME_TYPES = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -46,6 +61,10 @@ const WEB_EXT = new Set(['html', 'htm', 'md', 'txt', 'xml']);
 export const TEMPLATE_EXT = new Set([...OFFICE_EXT, ...WEB_EXT]);
 
 export function pdfConverters (ext) {
+  // Carbone ICE (I) is a DOCX → PDF engine only, available since 5.14.0
+  if (ext === 'docx') {
+    return ['L', 'O', 'I'];
+  }
   if (OFFICE_EXT.has(ext)) {
     return ['L', 'O'];
   }
@@ -82,10 +101,14 @@ export function discoverSamples (dir = SAMPLES_DIR) {
     const basename = path.basename(filename, path.extname(filename));
     const dataPath = path.join(dir, `${basename}.json`);
     const hasData = fs.existsSync(dataPath);
+    const name = sampleName(basename);
+    const { family, pages } = parseSampleIdentity(name);
 
     samples.push({
-      id           : `${sampleName(basename)}_${ext}`,
-      name         : sampleName(basename),
+      id           : `${name}_${ext}`,
+      name         : name,
+      family       : family,
+      pages        : pages,
       ext          : ext,
       mime         : MIME_TYPES[ext] || 'application/octet-stream',
       templateFile : filename,
@@ -98,20 +121,21 @@ export function discoverSamples (dir = SAMPLES_DIR) {
   return samples;
 }
 
-function describe (sample, converter, cpu) {
+function describe (sample, converter, cpu, vus) {
   const from = sample.ext.toUpperCase();
   const to = converter === null ? from : 'PDF';
   const how = converter === null ? 'merge only' : CONVERTER_NAMES[converter];
 
-  return `${sample.name} ${from} → ${to} (${how}) / ${cpu} CPU`;
+  return `${sample.name} ${from} → ${to} (${how}) / ${cpu} CPU / ${vus} VU`;
 }
 
 /**
  * @param  {Object}  options.samples  output of discoverSamples()
  * @param  {Array}   options.cpus     list of factory counts, ex: [1, 4]
- * @return {Array}   one entry per benchmark run, grouped by CPU count
+ * @param  {Array}   options.vus      list of concurrency levels, ex: [5, 20, 100]
+ * @return {Array}   one entry per benchmark run, grouped by CPU then sample
  */
-export function buildMatrix ({ samples, cpus }) {
+export function buildMatrix ({ samples, cpus, vus = [5] }) {
   const runs = [];
 
   for (const cpu of cpus) {
@@ -122,25 +146,31 @@ export function buildMatrix ({ samples, cpus }) {
         const convertTo = converter === null ? null : 'pdf';
         const suffix = converter === null ? 'native' : `pdf-${converter}`;
 
-        runs.push({
-          id            : `${sample.id}_${suffix}_${cpu}cpu`,
-          label         : describe(sample, converter, cpu),
-          sampleId      : sample.id,
-          sampleName    : sample.name,
-          templateFile  : sample.templateFile,
-          templatePath  : sample.templatePath,
-          templateExt   : sample.ext,
-          mime          : sample.mime,
-          dataFile      : sample.dataFile,
-          dataPath      : sample.dataPath,
-          cpu           : cpu,
-          convertTo     : convertTo,
-          outputExt     : convertTo === null ? sample.ext : convertTo,
-          converter     : converter,
-          converterName : converter === null ? 'none' : CONVERTER_NAMES[converter],
-          group         : converter === null ? 'merge' : converter,
-          groupLabel    : converter === null ? 'Merge only (no conversion)' : `PDF via ${CONVERTER_NAMES[converter]}`,
-        });
+        for (const vu of vus) {
+          runs.push({
+            id            : `${sample.id}_${suffix}_${cpu}cpu_${vu}vu`,
+            label         : describe(sample, converter, cpu, vu),
+            vendor        : VENDOR,
+            sampleId      : sample.id,
+            sampleName    : sample.name,
+            family        : sample.family,
+            pages         : sample.pages,
+            templateFile  : sample.templateFile,
+            templatePath  : sample.templatePath,
+            templateExt   : sample.ext,
+            mime          : sample.mime,
+            dataFile      : sample.dataFile,
+            dataPath      : sample.dataPath,
+            cpu           : cpu,
+            vus           : vu,
+            convertTo     : convertTo,
+            outputExt     : convertTo === null ? sample.ext : convertTo,
+            converter     : converter,
+            converterName : converter === null ? 'none' : CONVERTER_NAMES[converter],
+            group         : converter === null ? 'merge' : converter,
+            groupLabel    : converter === null ? 'Merge only (no conversion)' : `PDF via ${CONVERTER_NAMES[converter]}`,
+          });
+        }
       }
     }
   }
@@ -177,6 +207,9 @@ export function looksValid (buffer, outputExt) {
   if (outputExt === 'pdf') {
     return head.startsWith('%PDF');
   }
+  if (outputExt === 'jpg' || outputExt === 'jpeg') {
+    return buffer[0] === 0xFF && buffer[1] === 0xD8;
+  }
   if (OFFICE_EXT.has(outputExt) === true) {
     return head.startsWith('PK');
   }
@@ -184,11 +217,12 @@ export function looksValid (buffer, outputExt) {
   return true;
 }
 
-// `node bench/matrix.mjs [cpus]` prints the planned runs
+// `node bench/matrix.mjs [cpus] [vus]` prints the planned runs
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const cpus = (process.argv[2] || '1,4').split(',').map(Number);
+  const vus = (process.argv[3] || '10').split(',').map(Number);
   const samples = discoverSamples();
-  const runs = buildMatrix({ samples, cpus });
+  const runs = buildMatrix({ samples, cpus, vus });
 
   console.log(`${samples.length} samples found in ${SAMPLES_DIR}`);
   for (const sample of samples) {
