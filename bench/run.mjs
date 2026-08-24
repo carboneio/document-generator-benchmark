@@ -3,10 +3,14 @@
  * Carbone benchmark runner.
  *
  * For each requested number of Carbone factories (CPU), it starts a Carbone
- * container, then runs every sample of the matrix through k6 (merge only, and
- * PDF conversion with LibreOffice / OnlyOffice / Carbone ICE / Chromium),
- * at each requested concurrency, and finally writes one JSON result per run
- * plus the charts, the tables and the CSV.
+ * container, uploads every template once with `POST /template`, then runs every
+ * sample of the matrix through k6 (merge only, and PDF conversion with
+ * LibreOffice / OnlyOffice / Carbone ICE / Chromium), at each requested
+ * concurrency, and finally writes one JSON result per run plus the charts, the
+ * tables and the CSV.
+ *
+ * The measured requests are `POST /render/:templateVersionId` and only carry
+ * the JSON dataset: uploading the template is not part of what is measured.
  *
  *   node bench/run.mjs                       full benchmark (1 and 4 CPU, 10 VU)
  *   node bench/run.mjs --duration 10s        quick check
@@ -20,7 +24,7 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
-import { buildMatrix, buildPayload, discoverSamples, looksValid, ROOT_DIR } from './matrix.mjs';
+import { buildMatrix, buildPayload, discoverSamples, looksValid, readData, ROOT_DIR } from './matrix.mjs';
 import { generateReport } from './report.mjs';
 
 const PREVIEWS_DIR = path.join(ROOT_DIR, 'docs', 'previews');
@@ -245,7 +249,7 @@ function containerLogs (options, lines = 40) {
 const indent = (text) => text.split('\n').map((line) => `    ${line}`).join('\n');
 
 /** Network level failure, as opposed to Carbone answering with an HTTP error. */
-const looksLikeCrash = (message) => /socket hang up|ECONNRESET|ECONNREFUSED|EPIPE|no answer after/i.test(message);
+const isNetworkError = (message = '') => /ECONNRESET|ECONNREFUSED|ECONNABORTED|EPIPE|ETIMEDOUT|socket hang up|no answer/i.test(message);
 
 /** Resolves to null when GET /status returns 200, to an error label otherwise. */
 function probeStatus (port, timeoutMs = 3000) {
@@ -328,15 +332,13 @@ async function waitForServer (options) {
   ].join('\n'));
 }
 
-/* ----------------------------------------------------------------- warmup */
+/* ------------------------------------------------------------------- http */
 
-/**
- * Renders the document a few times before measuring: it validates the
- * configuration (a converter may be missing from the image) and lets Carbone
- * spawn its LibreOffice / OnlyOffice / Chromium workers.
- */
-/** POST the payload to Carbone with node:http, no dependency on global fetch. */
-function postRender (options, payload, timeoutMs) {
+const renderPath = (templateId) => `/render/${templateId}?download=true`;
+const renderUrl = (options, templateId) => `http://127.0.0.1:${options.port}${renderPath(templateId)}`;
+
+/** POST a JSON body to Carbone with node:http, no dependency on global fetch. */
+function postJson (options, urlPath, payload, timeoutMs) {
   return new Promise((resolve, reject) => {
     const body = Buffer.from(payload, 'utf8');
 
@@ -344,8 +346,8 @@ function postRender (options, payload, timeoutMs) {
       host    : '127.0.0.1',
       port    : options.port,
       method  : 'POST',
-      path    : RENDER_PATH,
-      // A dedicated socket per render, never a pooled one that the server may
+      path    : urlPath,
+      // A dedicated socket per call, never a pooled one that the server may
       // be closing at the same moment
       agent   : false,
       headers : {
@@ -361,7 +363,7 @@ function postRender (options, payload, timeoutMs) {
       response.on('end', () => resolve({ status: response.statusCode, body: Buffer.concat(chunks) }));
     });
 
-    // Inactivity timeout: a render that never answers must not block the suite
+    // Inactivity timeout: a call that never answers must not block the suite
     request.setTimeout(timeoutMs, () => {
       request.destroy(new Error(`no answer after ${Math.round(timeoutMs / 1000)}s`));
     });
@@ -369,6 +371,133 @@ function postRender (options, payload, timeoutMs) {
     request.end(body);
   });
 }
+
+/** How hard the calls made before the measured runs try. */
+const setupBudget = (options) => ({
+  attempts  : Math.max(5, options.warmupRetries + 2),
+  timeoutMs : Math.max(options.requestTimeout, 90) * 1000,
+});
+
+/**
+ * Posts until `validate` accepts the answer, and returns whatever it accepted.
+ *
+ * Carbone closes sockets while it spawns its converter workers, so transient
+ * network failures are retried; anything else is thrown as is.
+ */
+async function postUntilValid (options, { path: urlPath, payload, validate, label, attempts, timeoutMs }) {
+  let lastError = 'no attempt';
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const { status, body } = await postJson(options, urlPath, payload, timeoutMs);
+
+      if (status !== 200) {
+        lastError = `HTTP ${status} ${body.toString('utf8').slice(0, 200)}`;
+      } else {
+        const value = validate(body);
+
+        if (value !== null) {
+          return value;
+        }
+
+        lastError = `unexpected answer (${body.length} bytes)`;
+      }
+    } catch (error) {
+      lastError = error.message;
+
+      if (isNetworkError(error.message) === false) {
+        throw error;
+      }
+    }
+
+    if (attempt < attempts) {
+      log(`    ${label} ${attempt}/${attempts} → ${lastError} (retrying)`);
+      await sleep(2);
+    }
+  }
+
+  throw new Error(lastError);
+}
+
+/* -------------------------------------------------------------- templates */
+
+/**
+ * Reads the version id out of a `POST /template` answer:
+ * `{ success: true, data: { id, versionId } }`.
+ *
+ * The version id (sha256 of the file) pins the exact template. Servers with
+ * versioning disabled answer with `templateId`, the same id under its v4 name.
+ */
+function readVersionId (body) {
+  let answer = null;
+
+  try {
+    answer = JSON.parse(body.toString('utf8'));
+  } catch {
+    return null;
+  }
+
+  const id = answer?.data?.versionId ?? answer?.data?.templateId ?? answer?.data?.id;
+
+  return typeof id === 'string' && id !== '' ? id : null;
+}
+
+/** Stores one template and returns its version id. */
+function uploadTemplate (options, sample) {
+  const template = fs.readFileSync(sample.templatePath);
+
+  // Documented constraint: `template` must be the last field of the body
+  const payload = JSON.stringify({
+    versioning : true,
+    template   : `data:${sample.mime};base64,${template.toString('base64')}`,
+  });
+
+  return postUntilValid(options, {
+    ...setupBudget(options),
+    path     : '/template',
+    payload  : payload,
+    label    : sample.templateFile,
+    validate : readVersionId,
+  });
+}
+
+/**
+ * Uploads every template once, so that the measured renders only carry their
+ * JSON dataset instead of the base64 template.
+ *
+ * A container starts with an empty template storage, hence one upload round per
+ * container.
+ *
+ * @return {Map} sample id -> { versionId, error }, one entry per sample
+ */
+async function uploadTemplates (options, samples) {
+  const templates = new Map();
+
+  log(`\nUploading ${samples.length} template${samples.length > 1 ? 's' : ''} (POST /template)`);
+
+  for (const sample of samples) {
+    try {
+      const versionId = await uploadTemplate(options, sample);
+
+      templates.set(sample.id, { versionId: versionId, error: null });
+      log(`  ${sample.templateFile} → ${versionId}`);
+    } catch (error) {
+      templates.set(sample.id, { versionId: null, error: `POST /template failed: ${error.message}` });
+      log(`  ⚠ ${sample.templateFile}: ${error.message}`);
+    }
+  }
+
+  return templates;
+}
+
+/** The samples the runs actually use, `--filter` can select a subset. */
+function usedSamples (samples, runs) {
+  const used = new Set(runs.map((run) => run.sampleId));
+
+  return samples.filter((sample) => used.has(sample.id) === true);
+}
+
+/* ----------------------------------------------------------------- warmup */
 
 /**
  * Renders the document until `warmup` valid documents are produced.
@@ -378,7 +507,7 @@ function postRender (options, payload, timeoutMs) {
  * they are retried: a run is only skipped when Carbone never produced a valid
  * document, not when one attempt out of three failed.
  */
-async function warmup (options, run, payload) {
+async function warmup (options, run, payload, templateId) {
   const wanted = Math.max(1, options.warmup);
   const maxAttempts = wanted + Math.max(2, options.warmupRetries);
   let successes = 0;
@@ -394,7 +523,7 @@ async function warmup (options, run, payload) {
     const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
 
     try {
-      const { status, body } = await postRender(options, payload, options.requestTimeout * 1000);
+      const { status, body } = await postJson(options, renderPath(templateId), payload, options.requestTimeout * 1000);
 
       if (status !== 200) {
         lastError = `HTTP ${status} ${body.toString('utf8').slice(0, 300)}`;
@@ -427,8 +556,7 @@ async function warmup (options, run, payload) {
   return lastError;
 }
 
-const RENDER_PATH = '/render/template?download=true';
-const renderUrl = (options) => `http://127.0.0.1:${options.port}${RENDER_PATH}`;
+/* --------------------------------------------------------------- previews */
 
 function firstImageFromZip (buffer) {
   let offset = 0;
@@ -469,17 +597,11 @@ function asJpeg (buffer) {
   return null;
 }
 
-function isTransientRenderError (error) {
-  return /ECONNRESET|ECONNREFUSED|EPIPE|ECONNABORTED|socket hang up|ETIMEDOUT|no answer/i.test(error.message || '');
-}
+const isWebTemplate = (ext) => ext === 'html' || ext === 'htm';
 
-function previewPayload (run, converter) {
-  const template = fs.readFileSync(run.templatePath);
-  const data = run.dataPath === null ? {} : JSON.parse(fs.readFileSync(run.dataPath, 'utf8'));
-
+function previewPayload (sample, converter) {
   return JSON.stringify({
-    data      : data,
-    template  : `data:${run.mime};base64,${template.toString('base64')}`,
+    data      : readData(sample),
     convertTo : {
       formatName    : 'jpg',
       formatOptions : { PageRange: '1', Quality: 82 },
@@ -488,105 +610,62 @@ function previewPayload (run, converter) {
   });
 }
 
-async function postRenderRetry (options, payload, { attempts, timeoutMs, validate, label }) {
-  let lastError = 'no attempt';
-
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      const { status, body } = await postRender(options, payload, timeoutMs);
-
-      if (status !== 200) {
-        lastError = `HTTP ${status} ${body.toString('utf8').slice(0, 200)}`;
-      } else {
-        const value = validate(body);
-
-        if (value !== null) {
-          return value;
-        }
-
-        lastError = `unexpected output (${body.length} bytes)`;
-      }
-    } catch (error) {
-      lastError = error.message;
-
-      if (isTransientRenderError(error) === false) {
-        throw error;
-      }
-    }
-
-    if (attempt < attempts) {
-      log(`    ${label} ${attempt}/${attempts} → ${lastError} (retrying)`);
-      await sleep(2);
-    }
-  }
-
-  throw new Error(lastError);
-}
-
-async function primeLibreOffice (options, run) {
-  const template = fs.readFileSync(run.templatePath);
-  const data = run.dataPath === null ? {} : JSON.parse(fs.readFileSync(run.dataPath, 'utf8'));
-  const payload = JSON.stringify({
-    data      : data,
-    template  : `data:${run.mime};base64,${template.toString('base64')}`,
-    convertTo : 'pdf',
-    converter : 'L',
-  });
-
+/**
+ * The first LibreOffice conversion of a container spawns the worker, and the
+ * connection is sometimes reset while it does. Getting it out of the way here
+ * keeps the previews and the warmups clean.
+ */
+async function primeLibreOffice (options, sample, templateId) {
   log('  priming LibreOffice with one PDF render');
-  await postRenderRetry(options, payload, {
-    attempts  : Math.max(5, options.warmupRetries + 2),
-    timeoutMs : Math.max(options.requestTimeout, 90) * 1000,
-    label     : 'prime',
-    validate  : (body) => (looksValid(body, 'pdf') === true ? body : null),
+
+  await postUntilValid(options, {
+    ...setupBudget(options),
+    path     : renderPath(templateId),
+    payload  : JSON.stringify({ data: readData(sample), convertTo: 'pdf', converter: 'L' }),
+    label    : 'prime',
+    validate : (body) => (looksValid(body, 'pdf') === true ? body : null),
   });
 }
 
-async function generatePreviews (options, runs) {
-  const samples = [];
-  const seen = new Set();
-
-  for (const run of runs) {
-    if (seen.has(run.templateFile) === true) {
-      continue;
-    }
-
-    seen.add(run.templateFile);
-    samples.push(run);
-  }
-
+/** Renders the first page of every template as a JPG for the HTML report. */
+async function generatePreviews (options, samples, templates) {
   fs.mkdirSync(PREVIEWS_DIR, { recursive: true });
-  log(`\nGenerating ${samples.length} template preview${samples.length > 1 ? 's' : ''} (first page → JPG, LibreOffice)`);
+  log(`\nGenerating ${samples.length} template preview${samples.length > 1 ? 's' : ''} (first page → JPG)`);
 
-  const office = samples.find((run) => run.templateExt !== 'html' && run.templateExt !== 'htm');
+  const office = samples.find((sample) => isWebTemplate(sample.ext) === false
+    && templates.get(sample.id).versionId !== null);
 
   if (office !== undefined) {
     try {
-      await primeLibreOffice(options, office);
+      await primeLibreOffice(options, office, templates.get(office.id).versionId);
     } catch (error) {
       log(`  ⚠ LibreOffice prime failed: ${error.message} (previews will still be retried)`);
     }
   }
 
-  const attempts = Math.max(5, options.warmupRetries + 2);
-  const timeoutMs = Math.max(options.requestTimeout, 90) * 1000;
+  for (const sample of samples) {
+    const { versionId, error } = templates.get(sample.id);
 
-  for (const run of samples) {
-    const dest = path.join(PREVIEWS_DIR, `${run.templateFile}.jpg`);
-    const legacy = path.join(PREVIEWS_DIR, `${run.templateFile}.png`);
-    const converters = (run.templateExt === 'html' || run.templateExt === 'htm')
-      ? ['L', 'C']
-      : ['L'];
+    if (versionId === null) {
+      log(`  ⚠ ${sample.templateFile}: ${error}`);
+      continue;
+    }
+
+    const dest = path.join(PREVIEWS_DIR, `${sample.templateFile}.jpg`);
+    const legacy = path.join(PREVIEWS_DIR, `${sample.templateFile}.png`);
+    // Chromium is only a fallback: LibreOffice handles HTML too, just less well
+    const converters = isWebTemplate(sample.ext) === true ? ['L', 'C'] : ['L'];
     let saved = false;
     let lastError = 'no attempt';
 
     for (const converter of converters) {
       try {
-        const jpeg = await postRenderRetry(options, previewPayload(run, converter), {
-          attempts  : attempts,
-          timeoutMs : timeoutMs,
-          label     : `${run.templateFile} (${converter})`,
-          validate  : asJpeg,
+        const jpeg = await postUntilValid(options, {
+          ...setupBudget(options),
+          path     : renderPath(versionId),
+          payload  : previewPayload(sample, converter),
+          label    : `${sample.templateFile} (${converter})`,
+          validate : asJpeg,
         });
 
         fs.writeFileSync(dest, jpeg);
@@ -595,23 +674,23 @@ async function generatePreviews (options, runs) {
           fs.rmSync(legacy);
         }
 
-        log(`  ${run.templateFile} → ${path.relative(ROOT_DIR, dest)} (${(jpeg.length / 1024).toFixed(1)} KB, ${converter})`);
+        log(`  ${sample.templateFile} → ${path.relative(ROOT_DIR, dest)} (${(jpeg.length / 1024).toFixed(1)} KB, ${converter})`);
         saved = true;
         break;
-      } catch (error) {
-        lastError = error.message;
+      } catch (renderError) {
+        lastError = renderError.message;
       }
     }
 
     if (saved === false) {
-      log(`  ⚠ ${run.templateFile}: ${lastError}`);
+      log(`  ⚠ ${sample.templateFile}: ${lastError}`);
     }
   }
 }
 
 /* --------------------------------------------------------------------- k6 */
 
-function runK6 (options, run, payloadPath, summaryPath) {
+function runK6 (options, run, templateId, payloadPath, summaryPath) {
   const script = path.join(ROOT_DIR, 'bench', 'carbone-bench.js');
 
   const result = spawnSync('k6', ['run', script], {
@@ -620,7 +699,7 @@ function runK6 (options, run, payloadPath, summaryPath) {
       ...process.env,
       CARBONE_PAYLOAD  : payloadPath,
       CARBONE_SUMMARY  : summaryPath,
-      CARBONE_URL      : renderUrl(options),
+      CARBONE_URL      : renderUrl(options, templateId),
       CARBONE_LABEL    : run.label,
       CARBONE_VUS      : String(run.vus),
       CARBONE_DURATION : options.duration,
@@ -671,7 +750,7 @@ async function main () {
 
   log(`Carbone benchmark`);
   log(`  image ......... ${options.docker === true ? options.image : '(docker not managed)'}`);
-  log(`  endpoint ...... ${renderUrl(options)}`);
+  log(`  endpoint ...... ${renderUrl(options, ':templateVersionId')}`);
   log(`  factories ..... ${options.cpuList.join(', ')} CPU`);
   log(`  license ....... ${describeLicense(options)}`);
   log(`  load .......... ${options.vuList.join(', ')} VU during ${options.duration} per run`);
@@ -728,11 +807,14 @@ async function main () {
   const warmed = new Set();
   const warmupKey = (run) => `${run.sampleId}|${run.converter}|${run.cpu}`;
 
+  const used = usedSamples(samples, runs);
+  let templates = new Map();
   let previewsDone = false;
 
   if (options.docker === false) {
     await waitForServer(options);
-    await generatePreviews(options, runs);
+    templates = await uploadTemplates(options, used);
+    await generatePreviews(options, used, templates);
     previewsDone = true;
   }
 
@@ -744,8 +826,11 @@ async function main () {
 
         currentCpu = run.cpu;
 
+        // The new container starts with an empty template storage
+        templates = await uploadTemplates(options, used);
+
         if (previewsDone === false) {
-          await generatePreviews(options, runs);
+          await generatePreviews(options, used, templates);
           previewsDone = true;
         }
       }
@@ -754,22 +839,27 @@ async function main () {
       log(`▶ ${run.label}   [${results.length + 1}/${runs.length}]`);
       log(`  template ${run.templateFile} · data ${run.dataFile ?? '{}'}`);
 
+      const { versionId, error: uploadError } = templates.get(run.sampleId);
       const payload = buildPayload(run);
       const payloadPath = path.join(tmpDir, `${run.id}.json`);
 
       fs.writeFileSync(payloadPath, payload);
 
-      let warmupError = null;
+      // A template Carbone refused to store, or a warmup that never produced a
+      // valid document, are the two reasons not to measure a run
+      let skipReason = uploadError;
 
-      if (warmed.has(warmupKey(run)) === true) {
+      if (versionId === null) {
+        log(`  template not stored, nothing to render`);
+      } else if (warmed.has(warmupKey(run)) === true) {
         log(`  warmup already done for this pipeline`);
       } else {
-        warmupError = await warmup(options, run, payload);
+        skipReason = await warmup(options, run, payload, versionId);
       }
 
-      if (warmupError !== null) {
-        log(`  ⚠ skipped: ${warmupError}`);
-        saveResult(resultsDir, results, { ...runMeta(run), skipped: true, error: warmupError });
+      if (skipReason !== null) {
+        log(`  ⚠ skipped: ${skipReason}`);
+        saveResult(resultsDir, results, { ...runMeta(run), skipped: true, error: skipReason });
 
         // The payload is kept on failure so the request can be replayed by hand
         if (options.docker === true) {
@@ -779,14 +869,14 @@ async function main () {
           if (state === 'exited') {
             throw new Error([
               `Carbone stopped while rendering "${run.label}" (${detail}).`,
-              `Request: convertTo=${run.convertTo ?? 'none'} converter=${run.converter ?? 'none'} factories=${run.cpu}`,
+              `Request: POST ${renderUrl(options, versionId ?? ':templateVersionId')} factories=${run.cpu}`,
               `Payload kept for replay: ${path.relative(ROOT_DIR, payloadPath)}`,
               '',
               `Container logs:\n${containerLogs(options)}`,
             ].join('\n'));
           }
 
-          if (looksLikeCrash(warmupError) === true) {
+          if (isNetworkError(skipReason) === true) {
             log(`  container still running, last logs:\n${indent(containerLogs(options))}`);
           }
         }
@@ -796,7 +886,7 @@ async function main () {
 
       warmed.add(warmupKey(run));
 
-      const summary = runK6(options, run, payloadPath, path.join(tmpDir, `${run.id}.summary.json`));
+      const summary = runK6(options, run, versionId, payloadPath, path.join(tmpDir, `${run.id}.summary.json`));
 
       fs.rmSync(payloadPath, { force: true });
 

@@ -1,16 +1,17 @@
 /**
  * k6 script benchmarking ONE Carbone configuration.
  *
- * It is not meant to be run by hand: `bench/run.mjs` prepares the request body
- * (template + data already base64-encoded, convertTo and converter set), starts
- * the Carbone container and calls this script once per matrix entry.
+ * It is not meant to be run by hand: `bench/run.mjs` starts the Carbone
+ * container, uploads the template, prepares the request body (data, convertTo
+ * and converter) and calls this script once per matrix entry.
  *
  * Run it standalone with:
+ *   CARBONE_URL=http://127.0.0.1:4000/render/<templateVersionId>?download=true \
  *   CARBONE_PAYLOAD=.tmp/payload.json k6 run bench/carbone-bench.js
  *
  * Environment:
  *   CARBONE_PAYLOAD   path to the JSON body posted to Carbone   (required)
- *   CARBONE_URL       Carbone render endpoint                   (default http://127.0.0.1:4000/render/template?download=true)
+ *   CARBONE_URL       POST /render/:templateVersionId endpoint   (required)
  *   CARBONE_VUS       concurrent virtual users                  (default 10)
  *   CARBONE_DURATION  test duration                             (default 30s)
  *   CARBONE_MAX_P95   p(95) latency threshold in ms             (default 10000)
@@ -23,12 +24,18 @@ import { check } from 'k6';
 import { Trend, Counter } from 'k6/metrics';
 
 const PAYLOAD  = open(__ENV.CARBONE_PAYLOAD);
-const URL      = __ENV.CARBONE_URL || 'http://127.0.0.1:4000/render/template?download=true';
+// The template lives on the server now, so the URL carries its id: there is no
+// sensible default to fall back on
+const URL      = __ENV.CARBONE_URL;
 const LABEL    = __ENV.CARBONE_LABEL || 'carbone';
 const SUMMARY  = __ENV.CARBONE_SUMMARY || '';
 const VUS      = Number(__ENV.CARBONE_VUS || 10);
 const DURATION = __ENV.CARBONE_DURATION || '30s';
 const MAX_P95  = Number(__ENV.CARBONE_MAX_P95 || 10000);
+
+if (!URL) {
+  throw new Error('CARBONE_URL is required, ex: http://127.0.0.1:4000/render/<templateVersionId>?download=true');
+}
 
 export const options = {
   vus                    : VUS,

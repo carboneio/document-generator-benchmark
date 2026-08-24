@@ -19,14 +19,14 @@ The public report is a **dated static HTML page**: one summary, then one section
 Latest: [docs/index.html](docs/index.html) · [previous benchmarks](docs/index.html#history)
 
 <!-- BENCHMARK:RESULTS:START -->
-Latest report: **[2026-08-21 22:44:27 UTC](docs/index.html)** · [previous benchmarks](docs/index.html#history)
+Latest report: **[2026-08-22 08:50:10 UTC](docs/index.html)** · [previous benchmarks](docs/index.html#history)
 
 | Template sample | Merge only @ 4 CPU (RPS) | Convert to PDF @ 4 CPU (RPS) |
 | --------------- | --------------------------- | ------------------------------- |
-| [`financial_chart`](docs/index.html#financial-chart-docx-1) | DOCX → DOCX **146.8** | **125.5** · DOCX → PDF (fastest: Carbone ICE) |
-| [`invoice_simple`](docs/index.html#invoice-simple-docx-1) | DOCX → DOCX **244.9** | **174.2** · DOCX → PDF (fastest: Carbone ICE) |
-| [`ticket_qrcode`](docs/index.html#ticket-qrcode-docx-1) | DOCX → DOCX **62.7** | **60.1** · DOCX → PDF (fastest: Carbone ICE) |
-| [`invoice_simple`](docs/index.html#invoice-simple-html-1) | HTML → HTML **1024.3** | **332.5** · HTML → PDF (fastest: Chromium) |
+| [`financial_chart`](docs/index.html#financial-chart-docx-1) | DOCX → DOCX **178.5** | **126.1** · DOCX → PDF (fastest: Carbone ICE) |
+| [`invoice_simple`](docs/index.html#invoice-simple-docx-1) | DOCX → DOCX **288.7** | **172.9** · DOCX → PDF (fastest: Carbone ICE) |
+| [`ticket_qrcode`](docs/index.html#ticket-qrcode-docx-1) | DOCX → DOCX **70.3** | **63.5** · DOCX → PDF (fastest: Carbone ICE) |
+| [`invoice_simple`](docs/index.html#invoice-simple-html-1) | HTML → HTML **1202.8** | **329.4** · HTML → PDF (fastest: Chromium) |
 <!-- BENCHMARK:RESULTS:END -->
 
 Raw k6 metrics of the latest campaign: [RESULT.md](RESULT.md). The HTML pages in [`docs/`](docs) are meant to be committed (dated snapshot + `index.html`).
@@ -207,36 +207,45 @@ docker run -t -i --rm -p 4000:4000 carbone/carbone-ee:full-5.14.0 webserver -s -
 docker run -t -i --rm -p 4000:4000 carbone/carbone-ee:full-5.14.0 webserver -s -f 4
 ```
 
-### 2. Generate one document
+### 2. Upload a template
+
+Like the benchmark does: the template is stored once, and every document is then generated from its `templateVersionId`.
 
 ```bash
 cd samples
-template=$(base64 < template_incoice_simple.docx | tr -d '\r\n')
-data=$(cat template_incoice_simple.json)
 mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+template=$(base64 < template_incoice_simple.docx | tr -d '\r\n')
+
+curl -s -H 'Content-Type: application/json' \
+  -d "{\"versioning\":true,\"template\":\"data:${mime};base64,${template}\"}" \
+  'http://localhost:4000/template'
+# {"success":true,"data":{"id":"...","versionId":"914593af…","type":"docx", ...}}
+
+id=914593af…   # the versionId returned above
+```
+
+### 3. Generate one document
+
+```bash
+data=$(cat template_incoice_simple.json)
 
 # Merge only, no conversion
 curl -s -H 'Content-Type: application/json' \
-  -d "{\"data\":${data},\"template\":\"data:${mime};base64,${template}\"}" \
-  'http://localhost:4000/render/template?download=true' --output out.docx
+  -d "{\"data\":${data}}" \
+  "http://localhost:4000/render/${id}?download=true" --output out.docx
 
 # DOCX to PDF with LibreOffice ("L"), OnlyOffice ("O"), or Carbone ICE ("I")
 curl -s -H 'Content-Type: application/json' \
-  -d "{\"data\":${data},\"template\":\"data:${mime};base64,${template}\",\"convertTo\":\"pdf\",\"converter\":\"I\"}" \
-  'http://localhost:4000/render/template?download=true' --output out-ice.pdf
-
-# HTML to PDF with Chromium ("C")
-html=$(base64 < template_incoice_simple.html | tr -d '\r\n')
-curl -s -H 'Content-Type: application/json' \
-  -d "{\"data\":${data},\"template\":\"data:text/html;base64,${html}\",\"convertTo\":\"pdf\",\"converter\":\"C\"}" \
-  'http://localhost:4000/render/template?download=true' --output out-chromium.pdf
+  -d "{\"data\":${data},\"convertTo\":\"pdf\",\"converter\":\"I\"}" \
+  "http://localhost:4000/render/${id}?download=true" --output out-ice.pdf
 ```
 
-### 3. Run a single k6 test
+### 4. Run a single k6 test
 
 `bench/carbone-bench.js` reads a ready-made request body, so it can be replayed on its own:
 
 ```bash
+CARBONE_URL="http://localhost:4000/render/${id}?download=true" \
 CARBONE_PAYLOAD=./payload.json CARBONE_VUS=10 CARBONE_DURATION=30s k6 run bench/carbone-bench.js
 ```
 
@@ -248,7 +257,7 @@ CARBONE_PAYLOAD=./payload.json CARBONE_VUS=10 CARBONE_DURATION=30s k6 run bench/
 | ---- | ---- |
 | [`bench/matrix.mjs`](bench/matrix.mjs) | Discovers the samples, builds the run matrix, builds the Carbone request body |
 | [`bench/carbone-bench.js`](bench/carbone-bench.js) | k6 script measuring **one** configuration, exports a JSON summary |
-| [`bench/run.mjs`](bench/run.mjs) | Orchestrator: container lifecycle, warmup, k6 runs, JSON results |
+| [`bench/run.mjs`](bench/run.mjs) | Orchestrator: container lifecycle, template upload, warmup, k6 runs, JSON results |
 | [`bench/html.mjs`](bench/html.mjs) | Builds the dated public HTML page (summary + one section per template) |
 | [`bench/report.mjs`](bench/report.mjs) | Writes `docs/<date>.html`, `docs/index.html`, `RESULT.md`, CSV and the README summary |
 | `results/` | One JSON file per run + `index.json` (all runs and the test environment) |
@@ -257,14 +266,14 @@ Before measuring, the runner renders each configuration until it gets 3 **valid*
 
 Carbone sometimes resets the connection on the very first render of a kind, while those workers are still spawning. Such failures are retried — a run is skipped only when Carbone never produced a valid document, and the reason is then reported instead of polluting the results.
 
-The request body is built once by Node and posted verbatim by k6, so no base64 encoding or JSON serialization happens inside the load generator — the measured time is Carbone's.
+Each template is uploaded once with `POST /template`, before the measures, so a measured request only carries its JSON dataset. That body is built once by Node and posted verbatim by k6: no base64 encoding, no JSON serialization and no template upload happens inside the load generator — the measured time is Carbone's.
 
 ---
 
 ## 📊 Methodology
 
 - **Load tool**: [k6](https://k6.io), 10 virtual users, 30s per configuration (both configurable)
-- **Endpoint**: `POST /render/template?download=true`, the document is generated *and* downloaded in one call
+- **Endpoint**: `POST /render/:templateVersionId?download=true`, the document is generated *and* downloaded in one call
 - **Metrics**: average / median / p90 / p95 / p99 latency, throughput (RPS), failure rate
 - **Warmup**: 3 renders per configuration, excluded from the measures
 - **Response bodies** are discarded by k6 (`discardResponseBodies`) to keep the load generator cheap

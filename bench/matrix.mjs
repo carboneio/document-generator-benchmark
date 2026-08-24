@@ -178,15 +178,18 @@ export function buildMatrix ({ samples, cpus, vus = [5] }) {
   return runs;
 }
 
-/** Exact JSON body sent to `POST /render/template`, built once and reused by k6. */
-export function buildPayload (run) {
-  const template = fs.readFileSync(run.templatePath);
-  const data = run.dataPath === null ? {} : JSON.parse(fs.readFileSync(run.dataPath, 'utf8'));
+/** JSON dataset of a sample or a run, `{}` when there is no `.json` file. */
+export function readData ({ dataPath }) {
+  return dataPath === null ? {} : JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+}
 
-  const body = {
-    data     : data,
-    template : `data:${run.mime};base64,${template.toString('base64')}`,
-  };
+/**
+ * Exact JSON body sent to `POST /render/:templateVersionId`, built once and
+ * reused by k6. The template itself is uploaded beforehand with
+ * `POST /template`, so a render only carries the dataset.
+ */
+export function buildPayload (run) {
+  const body = { data: readData(run) };
 
   if (run.convertTo !== null) {
     body.convertTo = run.convertTo;
