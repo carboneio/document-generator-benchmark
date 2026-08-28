@@ -1,52 +1,63 @@
 # 📊 Carbone Document Generator Benchmark
 
-> **How fast does Carbone generate documents?** Real templates, real data, with and without PDF conversion, one document at a time and under load.
+> **How fast does Carbone generate documents?** Real templates, real data, with and without PDF conversion.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Benchmark](https://img.shields.io/badge/benchmark-k6-orange.svg)](https://k6.io)
 [![Carbone](https://img.shields.io/badge/carbone-5.14.0-A644C5.svg)](https://carbone.io)
 
-This repository measures the throughput and the latency of [**Carbone**](https://carbone.io) on a matrix of real document generation jobs. For every template of the [`samples/`](samples) folder, Carbone merges a JSON dataset into the template and, optionally, converts the result to PDF — on **1** or **4** conversion factories (`webserver -f`), which the report reads as **1 CPU** and **4 CPU**.
+This repository measures the speed of [**Carbone**](https://carbone.io) on real document jobs.
 
-Every pipeline is measured twice, because two different questions are worth answering:
+Carbone merges a JSON dataset into a template. It can then convert the result to PDF. Every template of the [`samples/`](samples) folder is measured on **1** conversion factory (`webserver -f 1`), then on **4**. The report calls them **1 CPU** and **4 CPU**.
+
+Each pipeline is measured twice, because two questions matter:
 
 | Measure | How | What it answers |
 | ------- | --- | --------------- |
-| **One document at a time** | `1 CPU · 1 VU` — one request in flight, nothing waiting in a queue | how long Carbone needs to produce this document |
-| **Under load** | `4 CPU · 5 VU` — five requests in flight, one more than the number of CPUs | how many documents the server delivers per minute |
+| **One document at a time** | `1 CPU · 1 VU` — one request, no queue | how long one document takes |
+| **Under load** | `4 CPU · 5 VU` — five requests at once, one more than the number of CPUs | how many documents per minute |
 
-A **VU** is a *virtual user*, sending one request after the other. A latency measured under load is a queue length in disguise — with a fixed number of virtual users, it is the throughput written in another unit — so the one document at a time run is the only one that really times a document. A large dataset per template adds a **`Pages/s`** figure, which puts a one page invoice and a two hundred page report on the same scale. HTML and DOCX are reported separately: their throughputs are not comparable.
+A **VU** is a *virtual user*. It sends one request, waits for the answer, then sends the next one.
 
-Everything is reproducible with a single command: `npm run bench`.
+Under load, the latency is mostly queue time. So only the one document at a time run really times a document.
+
+A large dataset adds a **`Pages / s`** figure. It puts a 1 page invoice and a 234 page report on the same scale.
+
+HTML and DOCX are reported apart. Their numbers are not comparable.
+
+Run everything with one command: `npm run bench`. Carbone Enterprise needs a license — [get a free trial with every feature](https://carbone.io/documentation/developer/on-premise-installation/licensing.html#get-a-license).
 
 ---
 
 ## 🎯 Results
 
-The public report is a **dated static HTML page**: one card per template, each with a preview of the document and a single table. The two first columns give the **`Doc/min`** delivered at `1 CPU · 1 VU` and at `4 CPU · 5 VU`, the smaller figure below being the **p95 latency** of the same run — under load it includes the queue wait time. The last column gives the **`Pages/s`**, the page generation speed of one large document processed alone on a single CPU, which is what makes a one page invoice comparable with a several hundred page report. The merge sits on its own row, apart and without a bar: it does not go through the conversion factories. Converters compete on their template only, and HTML and DOCX stay apart.
+The report is a **dated static HTML page**, one card per template. Each card has a preview of the document and one table:
 
-Latest: [docs/index.html](docs/index.html) · [previous benchmarks](docs/index.html#history)
+- **`Documents / min`** at `1 CPU · 1 VU`, then at `4 CPU · 5 VU`. The small figure below is the **p95 latency** of the same run. Under load it includes the queue wait time.
+- **`Pages / s`** for one large document, produced alone on one CPU. This is what makes a 1 page invoice comparable with a 234 page report.
+
+The merge has its own row, apart and without a bar: it does not go through the conversion factories. Converters compete on their own template only.
 
 <!-- BENCHMARK:RESULTS:START -->
-Latest report: **[2026-08-27 20:56:21 UTC](docs/index.html)** · [previous benchmarks](docs/index.html#history)
+Latest report: **[2026-08-28 13:29:34 UTC](docs/index.html)** · [previous benchmarks](docs/index.html#history)
 
-| Template sample | Merge only (Doc/min) | Convert to PDF (Doc/min) | Pages/s |
+| Template sample | Merge only (Documents / min) | Convert to PDF (Documents / min) | Pages / s |
 | --- | --- | --- | --- |
-| [`financial_chart`](docs/index.html#financial-chart-docx) | DOCX → DOCX **9,317** | **5,348** · DOCX → PDF (fastest: Carbone ICE) | **25** on 1 page (Carbone ICE) |
-| [`invoice_simple`](docs/index.html#invoice-simple-docx) | DOCX → DOCX **16,732** | **8,238** · DOCX → PDF (fastest: Carbone ICE) | **154** on 234 pages (Carbone ICE) |
-| [`ticket_qrcode`](docs/index.html#ticket-qrcode-docx) | DOCX → DOCX **4,268** | **3,514** · DOCX → PDF (fastest: Carbone ICE) | **24** on 1 page (Carbone ICE) |
-| [`invoice_simple`](docs/index.html#invoice-simple-html) | HTML → HTML **47,451** | **19,061** · HTML → PDF (fastest: Chromium) | **92** on 234 pages (Chromium) |
+| [`financial_chart`](docs/index.html#financial-chart-docx) | DOCX → DOCX **10,717** | **6,870** · DOCX → PDF (fastest: Carbone ICE) | **26** on 1 page (Carbone ICE) |
+| [`invoice_simple`](docs/index.html#invoice-simple-docx) | DOCX → DOCX **17,267** | **9,568** · DOCX → PDF (fastest: Carbone ICE) | **154** on 234 pages (Carbone ICE) |
+| [`ticket_qrcode`](docs/index.html#ticket-qrcode-docx) | DOCX → DOCX **4,272** | **3,671** · DOCX → PDF (fastest: Carbone ICE) | **160** on 200 pages (Carbone ICE) |
+| [`invoice_simple`](docs/index.html#invoice-simple-html) | HTML → HTML **61,652** | **20,851** · HTML → PDF (fastest: Chromium) | **93** on 234 pages (Chromium) |
 
-Both throughputs at **4 CPU · 5 VU**, pages per second on one document alone at **1 CPU · 1 VU**. The [report page](docs/index.html) adds the 1 CPU · 1 VU throughput, the p95 latency of every column and a preview of each document.
+Throughputs at **4 CPU · 5 VU**. Pages per second on one document alone, at **1 CPU · 1 VU**. The [report page](docs/index.html) also shows the 1 CPU · 1 VU throughput, the p95 latency of every column and a preview of each document.
 <!-- BENCHMARK:RESULTS:END -->
 
-Raw k6 metrics of the latest campaign: [RESULT.md](RESULT.md). The HTML pages in [`docs/`](docs) are meant to be committed (dated snapshot + `index.html`).
+Raw k6 metrics of the latest campaign: [RESULT.md](RESULT.md). The HTML pages in [`docs/`](docs) are meant to be committed: a dated snapshot, plus `index.html`.
 
 ---
 
 ## 🔬 What is measured
 
-Each sample is a **template + JSON data** pair. Carbone always merges the data into the template; the PDF conversion is an extra step handled by a dedicated engine:
+Each sample is a **template + JSON data** pair. Carbone always merges the data into the template. The PDF conversion is an extra step, done by a dedicated engine:
 
 | Pipeline | `convertTo` | `converter` | Engine |
 | -------- | ----------- | ----------- | ------ |
@@ -56,18 +67,22 @@ Each sample is a **template + JSON data** pair. Carbone always merges the data i
 | Office template → PDF | `pdf` | `O` | OnlyOffice |
 | Web template → PDF | `pdf` | `C` | Chromium |
 
-Each pipeline — one sample, one dataset, one output format, one converter — is played under two **profiles**, which is also the number of times Carbone is started:
+A pipeline is one sample, one dataset, one output format, one converter. Each one is played under two **profiles**. Carbone is started once per profile, never more:
 
 | Profile | Factories (CPU) | Virtual users (VU) | Work | Reported as |
 | ------- | --------------- | ------------------ | ---- | ----------- |
-| `solo` | 1 | 1 | 10 documents | the `1 CPU · 1 VU` column, and every `Pages/s` |
+| `solo` | 1 | 1 | 10 documents | the `1 CPU · 1 VU` column, and every `Pages / s` |
 | `load` | 4 | 5 | 100 documents per user, 60s max | the `4 CPU · 5 VU` column |
 
-Five virtual users on four CPU — one more request in flight than the server can handle at once: enough to keep every factory busy, not enough to turn the measure into a queue length.
+Five virtual users on four CPU: one request more than the server can handle at once. Enough to keep every factory busy, not enough to turn the measure into a queue length.
 
-The pipelines themselves come from the samples found in `samples/` (auto-discovered) and the converters relevant to their format: DOCX gets LibreOffice, OnlyOffice *and* Carbone ICE, other office templates get LibreOffice and OnlyOffice, web templates get Chromium.
+Pipelines come from the samples found in `samples/`, which are auto-discovered, and from the converters that fit their format. DOCX gets LibreOffice, OnlyOffice *and* Carbone ICE. Other office templates get LibreOffice and OnlyOffice. Web templates get Chromium.
 
-Every run stops on a **fixed amount of work**, not on a fixed clock, so a slow engine is measured on the same number of documents as a fast one; `maxDuration` is only a safety net for an engine too slow to finish. A document of more than **100 pages** is measured one at a time only, **3 times**, without warmup, and a single render is abandoned after **120s** — the report then shows `∞` instead of a duration. With the samples currently committed, that is around **35 runs**. Print the plan without running anything:
+Every run stops on a **fixed amount of work**, never on a clock. A slow engine is then measured on the same number of documents as a fast one. `maxDuration` is only a safety net.
+
+A document of more than **100 pages** is measured one at a time, **3 times**, without warmup. A render is abandoned after **120s**, and the report shows `∞` instead of a duration.
+
+With the samples committed here, that is around **35 runs**. Print the plan without running anything:
 
 ```bash
 npm run plan
@@ -82,22 +97,22 @@ npm run plan
 | `template_chart.docx` | `template_chart.json` | `financial_chart` | merge only, PDF (LibreOffice, OnlyOffice, Carbone ICE) |
 | `template_qrcode.docx` | `template_qrcode.json` | `ticket_qrcode` | merge only, PDF (LibreOffice, OnlyOffice, Carbone ICE) |
 
-A card is named after what the document is, not after its file: `template_chart.docx` is a financial report, `template_qrcode.docx` an event ticket.
+A card is named after what the document is, not after its file. `template_chart.docx` is a financial report, `template_qrcode.docx` an event ticket.
 
-Adding a sample requires **no code change**: drop `my_template.docx` and `my_template.json` into `samples/` and they are picked up on the next run. A template without a matching `.json` is rendered with an empty dataset.
+Adding a sample needs **no code change**. Drop `my_template.docx` and `my_template.json` into `samples/`, and they are picked up on the next run. A template without a matching `.json` is rendered with an empty dataset.
 
 ### Large documents, and pages per second
 
-A one page invoice says nothing about a two hundred page report: the merge grows with the data, the conversion grows with the layout. So a template can carry a **second dataset**, suffixed with the number of pages the generated document has:
+A 1 page invoice says nothing about a 200 page report. The merge grows with the data, the conversion grows with the layout. So a template can carry a **second dataset**. Its name ends with the number of pages the document has:
 
 ```
 template_invoice_simple.docx  +  template_invoice_simple.json        →     1 page
                                  template_invoice_simple_234p.json   →   234 pages
 ```
 
-Both are measured, and the large one feeds the **`Pages/s`** column of the report — the unit that lets a small document and a large one be compared. A large document is only measured one at a time: under load, its duration would say more about the queue than about the document.
+Both are measured. The large one feeds the **`Pages / s`** column of the report, the unit that compares a small document with a large one. A large document is only measured one at a time: under load, its duration would say more about the queue than about the document.
 
-Writing a 234 page dataset by hand is no fun, so `bench/grow-sample.mjs` does it. Ask it for a number of **pages** and the array to grow:
+Writing a 234 page dataset by hand is no fun, so `bench/grow-sample.mjs` does it. Give it a number of **pages** and the array to grow:
 
 ```bash
 # at least 200 pages of invoice, growing d.products
@@ -120,9 +135,13 @@ Growing "d.products" of template_invoice_simple.json until the document has at l
   .tmp/template_invoice_simple_205p.pdf — 2.30 MB, open it to check the result
 ```
 
-It starts with as many entries as pages asked, renders the PDF with Carbone, counts its pages, then scales the entry count up until it passes the target — 2 to 3 renders in practice, since the page count grows almost linearly. The file is named after the page count actually obtained, never after the target, so the report never claims a size the document does not have. Added entries are copies of the first one with randomized content: same shape, same types, same string lengths, and images replaced by mono-color pictures (a solid PNG weighs a few hundred bytes, where the original photo weighs 30 KB).
+It starts with as many entries as pages asked. It renders the PDF with Carbone, counts its pages, then raises the entry count until it passes the target. Two or three renders in practice, since the page count grows almost linearly.
 
-The PDF is kept in `.tmp/` to be checked. **Carbone must be running**, since the page count of a document can only be known by generating it. Pages are counted on the DOCX with Carbone ICE by default: `--template` picks another template when several share the dataset, `--converter L` another engine, and `--port` another server.
+The file is named after the page count obtained, never after the target. The report can then never claim a size the document does not have.
+
+Added entries are copies of the first one, with random content: same shape, same types, same string lengths. Images become mono-color pictures — a solid PNG weighs a few hundred bytes, the original photo 30 KB.
+
+The PDF stays in `.tmp/`, so you can check it. **Carbone must be running**: the page count of a document is only known once it is generated. Pages are counted on the DOCX with Carbone ICE. Use `--template` when several templates share the dataset, `--converter L` for another engine, `--port` for another server.
 
 ---
 
@@ -154,22 +173,22 @@ choco install k6
 npm run bench
 ```
 
-The runner does everything: it starts `carbone/carbone-ee:full-5.14.0` with `-f 1`, plays all the samples one document at a time, restarts the container with `-f 4`, plays them again with 5 virtual users, removes the container, then writes the HTML report, `RESULT.md` and the CSV.
+The runner does everything. It starts `carbone/carbone-ee:full-5.14.0` with `-f 1` and plays every sample one document at a time. Then it restarts the container with `-f 4` and plays them again with 5 virtual users. Finally it removes the container and writes the HTML report, `RESULT.md` and the CSV.
 
-The container is started with the same command as the [manual one](#-running-carbone-by-hand), only detached and named: `docker run -d --name carbone-bench -p 4000:4000 <image> webserver -s -f <n>`. Extra flags are opt-in (`--env`, `--shm-size`, `--docker-cpus`), and the exact command is printed before each start.
+The container runs the same command as the [manual one](#-running-carbone-by-hand), only detached and named: `docker run -d --name carbone-bench -p 4000:4000 <image> webserver -s -f <n>`. Extra flags are opt-in (`--env`, `--shm-size`, `--docker-cpus`). The exact command is printed before each start.
 
 ### Or start Carbone yourself
 
-If you prefer to control the container (custom flags, remote server, debugging), start it and point the runner at it with `--no-docker`. One factory count per server, since the runner cannot restart it:
+To control the container yourself — custom flags, remote server, debugging — start it and point the runner at it with `--no-docker`. One factory count per server, since the runner cannot restart it:
 
 ```bash
 docker run -t -i --rm -p 4000:4000 carbone/carbone-ee:full-5.14.0 webserver -s -f 4
 node bench/run.mjs --no-docker --cpus 4
 ```
 
-Both modes write to the same `results/` folder, so you can run `--cpus 1` and `--cpus 4` in two passes and still get one complete report. Add `--no-solo` to the second pass: timing a single document twice measures the same thing.
+Both modes write to the same `results/` folder. You can run `--cpus 1` and `--cpus 4` in two passes and still get one complete report. Add `--no-solo` to the second pass: timing a single document twice measures the same thing.
 
-Expect roughly **30 minutes** with the default settings (35 runs + warmups + container restarts).
+Expect roughly **30 minutes** with the default settings: 35 runs, plus warmups and container restarts.
 
 ```bash
 npm run bench:quick          # same matrix, a handful of documents per run, to validate the setup first
@@ -222,6 +241,8 @@ node bench/run.mjs --vus 4 --renders 30
 
 ### Enterprise license
 
+Carbone Enterprise needs a license, and so do the PDF converters. [Get a free trial with every feature](https://carbone.io/documentation/developer/on-premise-installation/licensing.html#get-a-license).
+
 The runner forwards the license to the container by itself. Use whichever form you already have:
 
 ```bash
@@ -237,7 +258,7 @@ npm run bench
 node bench/run.mjs --license-file ./my_license.carbone-license
 ```
 
-`CARBONE_LICENSE` and `CARBONE_EE_LICENSE` are forwarded with `docker run -e <name>`, so the key never appears in the printed command line. `--license-file` mounts the file read-only in the container `config/` directory. The line `license .......` in the runner header tells you which one was picked up.
+`CARBONE_LICENSE` and `CARBONE_EE_LICENSE` are forwarded with `docker run -e <name>`, so the key never appears in the printed command. `--license-file` mounts the file read-only in the container `config/` directory. The line `license .......` of the runner header tells you which one was picked up.
 
 ---
 
@@ -257,7 +278,7 @@ docker run -t -i --rm -p 4000:4000 carbone/carbone-ee:full-5.14.0 webserver -s -
 
 ### 2. Upload a template
 
-Like the benchmark does: the template is stored once, and every document is then generated from its `templateVersionId`.
+Like the benchmark does: the template is stored once, then every document is generated from its `templateVersionId`.
 
 ```bash
 cd samples
@@ -312,34 +333,34 @@ CARBONE_MAX_DURATION=60s CARBONE_TIMEOUT=120s k6 run bench/carbone-bench.js
 | [`bench/grow-sample.mjs`](bench/grow-sample.mjs) | Standalone: grows a dataset until the document reaches a page count |
 | `results/` | One JSON file per run + `index.json` (all runs and the test environment) |
 
-Before measuring, the runner renders each pipeline until it gets 3 **valid** documents (a PDF must start with `%PDF`, an office document with `PK`). This spawns the LibreOffice / OnlyOffice / Chromium workers before the load starts. The warmup belongs to the pipeline, not to the dataset: a large document reuses the workers already spawned by the small one instead of paying seconds for nothing.
+Before measuring, the runner renders each pipeline until it gets 3 **valid** documents: a PDF must start with `%PDF`, an office document with `PK`. This spawns the LibreOffice, OnlyOffice and Chromium workers before the load starts. The warmup belongs to the pipeline, not to the dataset, so a large document reuses the workers spawned by the small one.
 
-Carbone sometimes resets the connection on the very first render of a kind, while those workers are still spawning. Such failures are retried — a run is skipped only when Carbone never produced a valid document, and the reason is then reported instead of polluting the results.
+Carbone sometimes resets the connection on the first render of a kind, while those workers are still starting. Such failures are retried. A run is skipped only when Carbone never produced a valid document, and the reason is reported instead of polluting the results.
 
-Each template is uploaded once with `POST /template`, before the measures, so a measured request only carries its JSON dataset. That body is built once by Node and posted verbatim by k6: no base64 encoding, no JSON serialization and no template upload happens inside the load generator — the measured time is Carbone's.
+Each template is uploaded once with `POST /template`, before the measures. A measured request then only carries its JSON dataset. That body is built once by Node and posted as is by k6: no base64 encoding, no JSON serialization, no template upload inside the load generator. The measured time is Carbone's.
 
 ---
 
 ## 📊 Methodology
 
-- **Load tool**: [k6](https://k6.io), a fixed number of documents per virtual user (`per-vu-iterations`), so every engine is measured on the same amount of work
+- **Load tool**: [k6](https://k6.io), a fixed number of documents per virtual user (`per-vu-iterations`), so every engine gets the same amount of work
 - **Endpoint**: `POST /render/:templateVersionId?download=true`, the document is generated *and* downloaded in one call
-- **Metrics**: `Doc/min` and the p95 document latency of each profile, `Pages/s` from the one document at a time run, plus median / average / p90 / p99 and failure rate in the CSV
+- **Metrics**: `Documents / min` and the p95 document latency of each profile, `Pages / s` from the one document at a time run, plus median, average, p90, p99 and failure rate in the CSV
 - **Warmup**: 3 renders per pipeline, excluded from the measures, none on documents over 100 pages
-- **Out of scale**: a render abandoned after 120s stops its run at once and is reported as `∞` rather than as a duration
-- **Response bodies** are discarded by k6 (`discardResponseBodies`) to keep the load generator cheap
-- **Thresholds**: `http_req_failed < 1%` and `p(95) < 10s`; a crossed threshold is reported but the measures are kept
+- **Out of scale**: a render abandoned after 120s stops its run at once, and is reported as `∞` instead of a duration
+- **Response bodies** are dropped by k6 (`discardResponseBodies`) to keep the load generator cheap
+- **Thresholds**: `http_req_failed < 1%` and `p(95) < 10s`. A crossed threshold is reported, but the measures are kept
 
-The exact environment (host CPU, Docker and k6 versions, image, date) is recorded in `results/index.json` and printed in [RESULT.md](RESULT.md).
+The exact environment — host CPU, Docker and k6 versions, image, date — is recorded in `results/index.json` and printed in [RESULT.md](RESULT.md).
 
-> ⚠️ Benchmarks measure a single Carbone container on a single machine. Absolute numbers depend on your hardware. The HTML report compares **converters on the same template**; 1 vs 4 CPU is shown as scaling, not as a ranking. A later phase can add competing products as extra engines in the same per-template table (`vendor` is already on every run).
+> ⚠️ This benchmark measures one Carbone container on one machine. Absolute numbers depend on your hardware. The report compares **converters on the same template**. 1 vs 4 CPU shows scaling, not a ranking. A later phase can add competing products as extra engines in the same table (`vendor` is already on every run).
 
 ### Troubleshooting
 
-- **Carbone ICE rows reported as “not available”**: Carbone ICE requires **5.14.0** or later, and only converts DOCX to PDF. Use `--image carbone/carbone-ee:full-5.14.0` (the default).
+- **Carbone ICE rows reported as “not available”**: Carbone ICE needs **5.14.0** or later, and only converts DOCX to PDF. Use `--image carbone/carbone-ee:full-5.14.0`, the default.
 - **OnlyOffice rows reported as “not available”**: the converter is disabled in the image you used. Point Carbone to the binaries with `CARBONE_ONLY_OFFICE_PATH` (`"x2tPath, AllFontsPath, fontPath"`), or use an image that bundles it.
 - **Chromium rows reported as “not available”**: same idea with `CARBONE_CHROME_PATH`.
-- **Container exits during startup**: the runner stops right away and prints the container logs — usually an invalid or expired license, or a port already in use.
+- **Container exits during startup**: the runner stops at once and prints the container logs. Usually an invalid or expired license, or a port already in use.
 
 ---
 

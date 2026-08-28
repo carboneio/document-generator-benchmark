@@ -44,6 +44,14 @@ function displayName (family) {
 
 const PDF_ORDER = { docx: ['I', 'L', 'O'], html: ['C'], htm: ['C'] };
 
+/**
+ * A way out for a reader these figures did not convince. The page is static and
+ * hosted elsewhere, so it cannot open the chat of carbone.io by itself: the
+ * parameter is what a Crisp trigger listens to over there. Without that trigger
+ * the link is still a link to the home page.
+ */
+const CHAT_HREF = 'https://carbone.io/?chat=open';
+
 const escape = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
   .replace(/</g, '&lt;')
@@ -326,36 +334,36 @@ function numberCell (value, digits = 0) {
 }
 
 /**
- * Documents per minute, not per second: a one page invoice is delivered a few
- * hundred times per second while a 200 page report takes seconds, and one unit
- * has to cover both without falling under 1.
+ * A rate, rounded to the unit: at this scale a decimal is noise. Under 1 it is
+ * the other way around, where one decimal is what keeps a slow engine from
+ * reading as a zero.
  */
-function perMinuteOf (rps) {
-  const value = rps * 60;
-
-  return { value: value, digits: value >= 100 ? 0 : 1 };
-}
-
-function perMinute (rps) {
-  if (Number.isFinite(rps) === false) {
-    return '–';
+function rateDigits (value) {
+  if (value >= 1) {
+    return 0;
   }
 
-  const { value, digits } = perMinuteOf(rps);
-
-  return numberCell(value, digits);
+  // A single decimal would print "0.0" below one document every twenty seconds
+  return value >= 0.1 ? 1 : 2;
 }
 
-/** Same figure for RESULT.md and the README, where markup is out of place. */
-function perMinuteText (rps) {
-  if (Number.isFinite(rps) === false) {
-    return '–';
-  }
-
-  const { value, digits } = perMinuteOf(rps);
-
-  return groups(value, digits);
+/** A rate for the page, rewritten in the visitor's locale. */
+function rateFigure (value) {
+  return Number.isFinite(value) === false ? '–' : numberCell(value, rateDigits(value));
 }
+
+/** The same rate for RESULT.md and the README, where markup is out of place. */
+function rateText (value) {
+  return Number.isFinite(value) === false ? '–' : groups(value, rateDigits(value));
+}
+
+/**
+ * Documents per minute, not per second: a 200 page report takes seconds to
+ * produce, and one unit has to cover it as well as a one page invoice.
+ */
+const perMinute = (rps) => (Number.isFinite(rps) === false ? '–' : rateFigure(rps * 60));
+
+const perMinuteText = (rps) => (Number.isFinite(rps) === false ? '–' : rateText(rps * 60));
 
 /**
  * One duration formatter for a whole block: "710 ms" next to "5.15 s", or
@@ -422,7 +430,7 @@ const oneTime = (value) => timeFormat([value])(value);
  * load it also carries the wait in the queue, which changes what it means.
  */
 function p95Hint (column) {
-  const measured = '95% of documents were delivered faster than this.';
+  const measured = '95% of documents were delivered faster than this. Lower is better.';
 
   if (column.vus === 1) {
     return `Document latency (p95): ${measured}`;
@@ -438,7 +446,7 @@ function p95Hint (column) {
 /**
  * The bar of one cell, as a tint that fades in from the left and stops on a
  * crisp line at the value. It stays inside its cell, so each column is its own
- * little chart and no edge can be mistaken for a column separator.
+ * little chart.
  *
  * @param  {String}  color  engine color
  * @param  {Number}  share  0 to 1, of the best value of the column
@@ -449,9 +457,8 @@ function fillOf (color, share) {
     return '';
   }
 
-  // The best of a column stops just short of the next one: two full cells side
-  // by side would join into a single band across the row again
-  return ` class="bar" style="--c:${color}40;--w:${(Math.min(1, share) * 94).toFixed(1)}%"`;
+  // The fastest of a column fills its cell, the others in proportion
+  return ` class="bar" style="--c:${color}40;--w:${(Math.min(1, share) * 100).toFixed(1)}%"`;
 }
 
 /** Full width for the biggest of the column. */
@@ -469,7 +476,7 @@ function rateShare (values) {
  */
 function pipelineCell (ext, engine) {
   if (engine.key !== 'merge') {
-    return `<td class="pipe engine"><span class="dot" style="background:${engine.engine.color}"></span>${escape(engine.engine.short)}</td>`;
+    return `<td class="pipe"><span class="dot" style="background:${engine.engine.color}"></span>${escape(engine.engine.short)}</td>`;
   }
 
   // Written like the heading of the converters: both name a pipeline
@@ -617,8 +624,12 @@ function vuHint (column) {
 
 /** Where the pages per second comes from, since the column only shows a rate. */
 function pagesHint (big) {
-  return `Page generation speed for one ${big === true ? 'large ' : ''}document, `
-    + 'processed alone on a single CPU.';
+  if (big === true) {
+    return 'Page generation speed for the same document using a large JSON dataset to '
+      + 'generate multiple pages, processed alone on a single CPU.';
+  }
+
+  return 'Page generation speed for this document, processed alone on a single CPU.';
 }
 
 function rateCell (column, engine, share) {
@@ -669,15 +680,15 @@ function resultsTable (card) {
   const shares = columns.map((column) => rateShare(main.pdf.map((engine) => column.pick(engine)?.rps)));
   const pagesShare = rateShare(main.pdf.map(rateOf));
   const head = columns
-    .map((column) => unitHead('Doc/min', `${column.cpu} CPU · ${column.vus} VU`, vuHint(column)))
+    .map((column) => unitHead('Documents / min', `${column.cpu} CPU · ${column.vus} VU`, vuHint(column)))
     .join('');
-  // Only the big dataset deserves the "big documents" wording
+  // Only a second dataset deserves the "large documents" wording
   const pagesDetail = big === null ? `on ${pagesLabel(main.pages)}` : 'on large documents';
   const cells = (engine, tinted) => {
     const rate = rateOf(engine);
     const pages = isOut(rateRow(engine)) === true
       ? OUT_OF_SCALE
-      : (rate === null ? '–' : `<strong>${numberCell(Math.round(rate))}</strong>`);
+      : (rate === null ? '–' : `<strong>${rateFigure(rate)}</strong>`);
     const throughput = columns
       .map((column, index) => rateCell(column, engine, tinted === true ? shares[index](column.pick(engine)?.rps) : 0))
       .join('');
@@ -704,7 +715,7 @@ function resultsTable (card) {
       <thead><tr>
         <th></th>
         ${head}
-        ${unitHead('Pages/s', pagesDetail, pagesHint(big !== null))}
+        ${unitHead('Pages / s', pagesDetail, pagesHint(big !== null))}
       </tr></thead>
       ${merge}${converters}
     </table>
@@ -716,8 +727,11 @@ function templateSection (card) {
 
   return `<section class="card" id="${card.id}">
     <header class="card-head">
-      <h2 class="template-name">${escape(card.title)}</h2>
-      <p class="template-meta"><span class="badge">${escape(formatLabel(card.ext))}</span></p>
+      <div class="card-title">
+        <h2 class="template-name">${escape(card.title)}</h2>
+        <p class="template-meta"><span class="badge">${escape(formatLabel(card.ext))}</span></p>
+      </div>
+      <a class="card-ask" href="${CHAT_HREF}" target="_blank" rel="noopener">Need it faster? Let’s talk</a>
     </header>
     <div class="card-body${preview === '' ? ' card-body-wide' : ''}">
       ${preview}
@@ -834,7 +848,24 @@ main.wrap { padding-top: 40px; padding-bottom: 80px; }
 }
 .card-body-wide { grid-template-columns: 1fr; }
 .card-data { min-width: 0; }
-.card-head { margin-bottom: 14px; }
+/* The name of the document, and the way out for a reader it did not convince */
+.card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 20px;
+  margin-bottom: 14px;
+}
+.card-title { min-width: 0; }
+/* Quiet until looked for: a link, never a button */
+.card-ask {
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.card-ask:hover { color: var(--accent); text-decoration: underline; }
 .card h2 { margin: 0 0 8px; }
 .template-name {
   margin: 0 0 6px;
@@ -867,12 +898,15 @@ main.wrap { padding-top: 40px; padding-bottom: 80px; }
 .small { font-size: 13px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { text-align: left; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th, td { text-align: left; padding: 8px var(--gut, 10px) 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { font-size: 12px; color: var(--muted); font-weight: 600; }
 /* The unit leads the column, the configuration it was measured with follows */
 .unit { font-size: 14px; color: var(--ink); }
-/* Fixed columns, so a bar means the same width from one row to the next */
-.grid { --pipe: 150px; table-layout: fixed; }
+/*
+ * Fixed columns, so a bar means the same width from one row to the next. The
+ * gutters are variables: a phone screen only has to narrow them once.
+ */
+.grid { --pipe: 150px; --gut: 10px; --gap: 8px; table-layout: fixed; }
 .grid col.pipe { width: var(--pipe); }
 .grid tbody td { padding-top: 10px; padding-bottom: 12px; }
 .grid td.pipe .muted { font-size: 12px; }
@@ -920,16 +954,16 @@ th { font-size: 12px; color: var(--muted); font-weight: 600; }
 }
 .grid .group-head th { padding: 18px 0 4px; border-bottom: 0; }
 .grid td.group .muted { font-weight: 400; }
-.grid td.engine { padding-left: 16px; }
 /*
- * The bar of one cell: it fades in from the left and ends on a crisp line at
- * the value, so the eye follows the edges without reading them as a grid.
+ * The bar of one cell: it starts on the left, fades in and ends on a crisp line
+ * at the value, over the whole height of the row. The fastest of a column runs
+ * to the edge of its cell, the others in proportion.
  */
 .grid td.bar {
   background-image: linear-gradient(90deg, transparent 0, var(--c) var(--w), transparent var(--w));
 }
 /* Air on the left of every value, tinted or not, so the columns stay aligned */
-.grid th + th, .grid td + td { padding-left: 8px; }
+.grid th + th, .grid td + td { padding-left: var(--gap); }
 /* Merge only: same table, but nothing to compare with the converters below */
 .grid tr.apart td { border-bottom: 2px solid #cfc2dc; padding-bottom: 14px; }
 .preview { margin: 0; }
@@ -954,10 +988,12 @@ footer { color: var(--muted); font-size: 12px; padding: 0 0 40px; }
   .card-body { grid-template-columns: 1fr; gap: 16px; }
   .preview img { max-width: var(--thumb); }
   table { font-size: 13px; }
-  /* Enough for "DOCX → DOCX" to stay on one line */
-  .grid { --pipe: 122px; }
-  .grid th { font-size: 11px; }
-  .grid .group-head th, .grid td.group { font-size: 13px; }
+  /* Enough for "DOCX → DOCX" to stay on one line, tighter everywhere else */
+  .grid { --pipe: 100px; --gut: 6px; --gap: 4px; }
+  .grid th { font-size: 10px; }
+  /* "Documents" has to fit a third of a phone screen, unit above sub-label */
+  .unit { font-size: 11px; }
+  .grid .group-head th, .grid td.group { font-size: 12px; }
   /* Anchored on its right, the bubble cannot run past a narrow screen */
   .hint::after { width: 210px; left: auto; right: 0; }
 }
@@ -1061,7 +1097,7 @@ export function summaryMarkdown (model, { pageHref = 'docs/index.html', archiveH
   const lines = [
     `Latest report: **[${date}](${pageHref})** · [previous benchmarks](${archiveHref})`,
     '',
-    '| Template sample | Merge only (Doc/min) | Convert to PDF (Doc/min) | Pages/s |',
+    '| Template sample | Merge only (Documents / min) | Convert to PDF (Documents / min) | Pages / s |',
     '| --- | --- | --- | --- |',
   ];
 
@@ -1076,13 +1112,13 @@ export function summaryMarkdown (model, { pageHref = 'docs/index.html', archiveH
       : `**${perMinuteText(rpsOf(winner, main.chartCpu))}** · ${toPdf(card.ext)} (fastest: ${winner.engine.short})`;
     const pages = rate === null
       ? '–'
-      : `**${groups(Math.round(rate), 0)}** on ${pagesLabel(source.pages)} (${source.winner.engine.short})`;
+      : `**${rateText(rate)}** on ${pagesLabel(source.pages)} (${source.winner.engine.short})`;
 
     lines.push(`| [\`${card.title}\`](${pageHref}#${card.id}) | ${merge === null ? '–' : `${sameFormat(card.ext)} **${perMinuteText(merge)}**`} | ${pdf} | ${pages} |`);
   }
 
-  lines.push('', `Both throughputs at **${load}**, pages per second on one document alone at **${solo}**.`
-    + ` The [report page](${pageHref}) adds the ${solo} throughput, the p95 latency of every column`
+  lines.push('', `Throughputs at **${load}**. Pages per second on one document alone, at **${solo}**.`
+    + ` The [report page](${pageHref}) also shows the ${solo} throughput, the p95 latency of every column`
     + ' and a preview of each document.');
 
   return lines.join('\n');
