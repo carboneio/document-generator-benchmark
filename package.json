@@ -9,7 +9,8 @@
   },
   "scripts": {
     "bench": "node bench/run.mjs",
-    "bench:quick": "node bench/run.mjs --duration 10s --cooldown 1",
+    "bench:quick": "node bench/run.mjs --renders 20 --solo-renders 3 --max-duration 20s --cooldown 1",
+    "grow-sample": "node bench/grow-sample.mjs",
     "matrix": "node bench/matrix.mjs",
     "plan": "node bench/run.mjs --dry-run",
     "report": "node bench/report.mjs"

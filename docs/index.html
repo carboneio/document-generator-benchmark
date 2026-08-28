@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Carbone benchmark — 2026-08-22 08:50:10 UTC</title>
+  <title>Carbone benchmark — 2026-08-27 20:56:21 UTC</title>
   <style>
 :root {
   --bg: #f6f3f8;
@@ -13,6 +13,8 @@
   --line: #e6ddee;
   --accent: #A644C5;
   --max: 1080px;
+  /* Same width for a portrait and for a landscape preview */
+  --thumb: 190px;
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -71,28 +73,25 @@ header.top .cta-site {
   letter-spacing: 0.01em;
 }
 header.top .cta-site:hover { color: #fff; }
-main { padding: 40px 0 80px; }
+/* Beats the horizontal padding of .wrap, which has the stronger selector */
+main.wrap { padding-top: 40px; padding-bottom: 80px; }
 .card {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 16px;
-  padding: 22px 22px 18px;
+  padding: 44px 44px 38px;
   margin: 0 0 22px;
 }
-.card-top {
+/* Preview on the left, table on the right: one glance takes both */
+.card-body {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 20px;
-  align-items: stretch;
-  margin-bottom: 12px;
+  grid-template-columns: var(--thumb) 1fr;
+  gap: 24px;
+  align-items: start;
 }
-.card-intro {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-.card-intro .mode { flex: 1; }
+.card-body-wide { grid-template-columns: 1fr; }
+.card-data { min-width: 0; }
+.card-head { margin-bottom: 14px; }
 .card h2 { margin: 0 0 8px; }
 .template-name {
   margin: 0 0 6px;
@@ -101,12 +100,13 @@ main { padding: 40px 0 80px; }
   letter-spacing: -0.02em;
 }
 .template-meta {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: 13px;
   color: var(--muted);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 10px;
 }
 .badge {
   display: inline-block;
@@ -119,58 +119,104 @@ main { padding: 40px 0 80px; }
   letter-spacing: .05em;
   text-transform: uppercase;
 }
-.badge-pages {
-  background: #fff;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  font-weight: 600;
-}
-h3 { margin: 18px 0 6px; font-size: 15px; }
 .eyebrow { text-transform: uppercase; letter-spacing: .08em; font-size: 11px; color: var(--muted); margin: 0 0 4px; }
 .muted { color: var(--muted); }
-.file { font-size: 12px; }
-.file a { color: var(--accent); }
-.stat { font-size: 28px; font-weight: 700; margin: 4px 0; }
-.stat small { font-size: 14px; font-weight: 600; color: var(--muted); }
+.small { font-size: 13px; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { font-size: 12px; color: var(--muted); font-weight: 600; }
-.bars { display: grid; gap: 10px; margin: 12px 0 8px; }
-.bar-row { display: grid; grid-template-columns: 128px 1fr 170px; gap: 10px; align-items: center; }
-.bar-name { font-weight: 600; }
-.bar-track { background: #f0eaf4; border-radius: 999px; height: 14px; overflow: hidden; }
-.bar { height: 100%; border-radius: 999px; }
-.bar-value { font-size: 13px; }
-#summary { margin-top: 16px; margin-bottom: 36px; }
-#details { margin-bottom: 22px; }
-.section-title { margin: 0 0 12px; font-size: 22px; }
+/* The unit leads the column, the configuration it was measured with follows */
+.unit { font-size: 14px; color: var(--ink); }
+/* Fixed columns, so a bar means the same width from one row to the next */
+.grid { --pipe: 150px; table-layout: fixed; }
+.grid col.pipe { width: var(--pipe); }
+.grid tbody td { padding-top: 10px; padding-bottom: 12px; }
+.grid td.pipe .muted { font-size: 12px; }
+/* "227 ms" never splits from its unit, even in a narrow column */
+.grid td .muted { white-space: nowrap; }
+/*
+ * The bubble of the latency. A native title never shows up as a bubble in every
+ * browser, and the dotted rule is what makes the hover findable at all.
+ */
+.hint {
+  position: relative;
+  width: fit-content;
+  cursor: help;
+  text-decoration: underline dotted #cdc2d6;
+  text-underline-offset: 3px;
+}
+.hint::after {
+  content: attr(data-hint);
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  z-index: 5;
+  width: 250px;
+  margin-bottom: 8px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: #1c1224;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  white-space: normal;
+  text-decoration: none;
+  box-shadow: 0 8px 20px rgba(28, 18, 36, .28);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .12s ease;
+}
+.hint:hover::after { opacity: 1; visibility: visible; }
+/* A pipeline name: on its own row for the converters, in the cell for the merge */
+.grid .group-head th, .grid td.group {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.grid .group-head th { padding: 18px 0 4px; border-bottom: 0; }
+.grid td.group .muted { font-weight: 400; }
+.grid td.engine { padding-left: 16px; }
+/*
+ * The bar of one cell: it fades in from the left and ends on a crisp line at
+ * the value, so the eye follows the edges without reading them as a grid.
+ */
+.grid td.bar {
+  background-image: linear-gradient(90deg, transparent 0, var(--c) var(--w), transparent var(--w));
+}
+/* Air on the left of every value, tinted or not, so the columns stay aligned */
+.grid th + th, .grid td + td { padding-left: 8px; }
+/* Merge only: same table, but nothing to compare with the converters below */
+.grid tr.apart td { border-bottom: 2px solid #cfc2dc; padding-bottom: 14px; }
 .preview { margin: 0; }
 .preview img {
   display: block;
-  width: 148px;
+  width: 100%;
   height: auto;
+  max-height: 300px;
+  object-fit: contain;
+  object-position: top;
   border-radius: 8px;
   border: 1px solid var(--line);
   box-shadow: 0 10px 24px rgba(28, 18, 36, .12);
   background: #fff;
 }
-.preview-landscape img { width: 280px; }
-.mode {
-  background: #faf7fc;
-  border-radius: 12px;
-  padding: 14px 16px 12px;
-  border-left: 3px solid var(--accent);
-}
-.mode h3 { margin: 0 0 8px; font-size: 16px; }
-.mode .eyebrow { color: var(--accent); }
-.mode table { margin-top: 8px; }
 .history { padding-left: 18px; }
 footer { color: var(--muted); font-size: 12px; padding: 0 0 40px; }
-@media (max-width: 720px) {
-  .bar-row, .card-top { display: block; }
-  .bar-track { margin: 4px 0; }
-  .preview { margin-top: 12px; }
+@media (max-width: 780px) {
+  /* The luxury of a wide margin does not fit on a phone */
+  .card { padding: 24px 20px 20px; }
+  /* Preview first, then the table, as it comes in the markup */
+  .card-body { grid-template-columns: 1fr; gap: 16px; }
+  .preview img { max-width: var(--thumb); }
+  table { font-size: 13px; }
+  /* Enough for "DOCX → DOCX" to stay on one line */
+  .grid { --pipe: 122px; }
+  .grid th { font-size: 11px; }
+  .grid .group-head th, .grid td.group { font-size: 13px; }
+  /* Anchored on its right, the bubble cannot run past a narrow screen */
+  .hint::after { width: 210px; left: auto; right: 0; }
 }
 </style>
 </head>
@@ -180,9 +226,9 @@ footer { color: var(--muted); font-size: 12px; padding: 0 0 40px; }
       <p class="eyebrow">Public benchmark</p>
       <h1>How fast is Carbone?</h1>
       <p class="meta">
-        2026-08-22 08:50:10 UTC
+        2026-08-27 20:56:21 UTC
         · carbone/carbone-ee:full-5.14.0
-        · 10 VU · 10s
+        · 1 and 5 VU
         · 1, 4 CPU
         · Apple M4 Max · 14 cores
       </p>
@@ -199,250 +245,149 @@ footer { color: var(--muted); font-size: 12px; padding: 0 0 40px; }
     </div>
   </header>
   <main class="wrap">
-    <section id="summary">
-      <h2 class="section-title">Summary — best results</h2>
-      <table>
-    <thead><tr>
-      <th>Template sample</th>
-      <th>Merge only @ 4 CPU (RPS)</th>
-      <th>Convert to PDF @ 4 CPU (RPS)</th>
-    </tr></thead>
-    <tbody><tr>
-      <td><a href="#financial-chart-docx-1">financial_chart</a><div class="muted">1 page</div></td>
-      <td><strong>178.5</strong><div class="muted">DOCX → DOCX</div></td>
-      <td><strong>126.1</strong><div class="muted">DOCX → PDF (fastest: Carbone ICE)</div></td>
-    </tr><tr>
-      <td><a href="#invoice-simple-docx-1">invoice_simple</a><div class="muted">1 page</div></td>
-      <td><strong>288.7</strong><div class="muted">DOCX → DOCX</div></td>
-      <td><strong>172.9</strong><div class="muted">DOCX → PDF (fastest: Carbone ICE)</div></td>
-    </tr><tr>
-      <td><a href="#ticket-qrcode-docx-1">ticket_qrcode</a><div class="muted">1 page</div></td>
-      <td><strong>70.3</strong><div class="muted">DOCX → DOCX</div></td>
-      <td><strong>63.5</strong><div class="muted">DOCX → PDF (fastest: Carbone ICE)</div></td>
-    </tr><tr>
-      <td><a href="#invoice-simple-html-1">invoice_simple</a><div class="muted">1 page</div></td>
-      <td><strong>1202.8</strong><div class="muted">HTML → HTML</div></td>
-      <td><strong>329.4</strong><div class="muted">HTML → PDF (fastest: Chromium)</div></td>
-    </tr></tbody>
-  </table>
-    </section>
-    <section id="details">
-      <h2 class="section-title">Results by template</h2>
-      <section class="card" id="financial-chart-docx-1">
-    <div class="card-top">
-      <div class="card-intro">
-        <header>
-          <h2 class="template-name">financial_chart</h2>
-          <p class="template-meta">
-            <span class="badge">DOCX</span>
-            <span class="badge badge-pages">1 page</span>
-          </p>
-          <p class="muted file"><a href="https://github.com/carboneio/document-generator-benchmark/blob/master/samples/template_chart.docx" target="_blank" rel="noopener">template_chart.docx</a> + <a href="https://github.com/carboneio/document-generator-benchmark/blob/master/samples/template_chart.json" target="_blank" rel="noopener">template_chart.json</a></p>
-        </header>
-        <article class="mode">
-          <p class="eyebrow">Merge only</p>
-          <h3>DOCX → DOCX</h3>
-          <p class="stat">178.5 <small>RPS @ 4 CPU</small></p>
-        </article>
-      </div>
-      <figure class="preview preview-landscape">
-    <img src="previews/template_chart.docx.jpg" alt="financial_chart template preview" width="280"/>
-  </figure>
-    </div>
-    <article class="mode">
-      <p class="eyebrow">Convert to PDF</p>
-      <h3>DOCX → PDF</h3>
-      <div class="bars"><div class="bar-row">
-      <div class="bar-name">Carbone ICE</div>
-      <div class="bar-track"><div class="bar" style="width:100.0%;background:#A644C5"></div></div>
-      <div class="bar-value"><strong>126.1</strong> RPS<span class="muted"> · 78.9 ms</span></div>
-    </div><div class="bar-row">
-      <div class="bar-name">LibreOffice</div>
-      <div class="bar-track"><div class="bar" style="width:27.7%;background:#ff7f0e"></div></div>
-      <div class="bar-value"><strong>34.9</strong> RPS<span class="muted"> · 283.7 ms</span></div>
-    </div><div class="bar-row">
-      <div class="bar-name">OnlyOffice</div>
-      <div class="bar-track"><div class="bar" style="width:5.8%;background:#2ca02c"></div></div>
-      <div class="bar-value"><strong>7.4</strong> RPS<span class="muted"> · 1285.5 ms</span></div>
-    </div></div>
-      <p class="muted">Fastest here: <strong>Carbone ICE</strong></p>
-      <table>
-    <thead><tr><th>Converter</th><th>1 CPU (RPS)</th><th>4 CPU (RPS)</th><th>Scaling</th></tr></thead>
-    <tbody><tr>
-      <td><span class="dot" style="background:#A644C5"></span>Carbone ICE</td>
-      <td><strong>41.0</strong><div class="muted">241.0 ms</div></td><td><strong>126.1</strong><div class="muted">78.9 ms</div></td>
-      <td>×3.1</td>
-    </tr><tr>
-      <td><span class="dot" style="background:#ff7f0e"></span>LibreOffice</td>
-      <td><strong>10.0</strong><div class="muted">956.4 ms</div></td><td><strong>34.9</strong><div class="muted">283.7 ms</div></td>
-      <td>×3.5</td>
-    </tr><tr>
-      <td><span class="dot" style="background:#2ca02c"></span>OnlyOffice</td>
-      <td><strong>2.1</strong><div class="muted">4057.5 ms</div></td><td><strong>7.4</strong><div class="muted">1285.5 ms</div></td>
-      <td>×3.5</td>
-    </tr></tbody>
-  </table>
-    </article>
-  </section>
-<section class="card" id="invoice-simple-docx-1">
-    <div class="card-top">
-      <div class="card-intro">
-        <header>
-          <h2 class="template-name">invoice_simple</h2>
-          <p class="template-meta">
-            <span class="badge">DOCX</span>
-            <span class="badge badge-pages">1 page</span>
-          </p>
-          <p class="muted file"><a href="https://github.com/carboneio/document-generator-benchmark/blob/master/samples/template_incoice_simple.docx" target="_blank" rel="noopener">template_incoice_simple.docx</a> + <a href="https://github.com/carboneio/document-generator-benchmark/blob/master/samples/template_incoice_simple.json" target="_blank" rel="noopener">template_incoice_simple.json</a></p>
-        </header>
-        <article class="mode">
-          <p class="eyebrow">Merge only</p>
-          <h3>DOCX → DOCX</h3>
-          <p class="stat">288.7 <small>RPS @ 4 CPU</small></p>
-        </article>
-      </div>
+    <section class="card" id="financial-chart-docx">
+    <header class="card-head">
+      <h2 class="template-name">financial_chart</h2>
+      <p class="template-meta"><span class="badge">DOCX</span></p>
+    </header>
+    <div class="card-body">
       <figure class="preview">
-    <img src="previews/template_incoice_simple.docx.jpg" alt="invoice_simple template preview" width="148"/>
+    <img src="previews/template_chart.docx.jpg" alt="financial_chart template preview" width="1124" height="795"/>
   </figure>
+      <div class="card-data"><table class="grid">
+      <colgroup><col class="pipe"/><col/><col/><col/></colgroup>
+      <thead><tr>
+        <th></th>
+        <th><span class="unit">Doc/min</span>
+        <div class="muted hint" data-hint="A VU is a virtual user, sending one request after the other. One request in flight on 1 CPU: one document at a time, nothing waiting in a queue.">1 CPU · 1 VU</div></th><th><span class="unit">Doc/min</span>
+        <div class="muted hint" data-hint="A VU is a virtual user, sending one request after the other. 5 requests in flight on 4 CPU: the figures include the wait in the queue.">4 CPU · 5 VU</div></th>
+        <th><span class="unit">Pages/s</span>
+        <div class="muted hint" data-hint="Page generation speed for one document, processed alone on a single CPU.">on 1 page</div></th>
+      </tr></thead>
+      <tbody><tr class="apart"><td class="pipe group">DOCX → DOCX<div class="muted">merge only</div></td><td><strong><span data-num="5856.134300679962" data-digits="0">5,856</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this."><span data-num="10.2669" data-digits="0">10</span> ms</div></td><td><strong><span data-num="9317.218685992648" data-digits="0">9,317</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this."><span data-num="53.470299999999995" data-digits="0">53</span> ms</div></td><td><strong><span data-num="106" data-digits="0">106</span></strong></td></tr></tbody><tbody>
+        <tr class="group-head"><th colspan="4">DOCX → PDF</th></tr>
+        <tr><td class="pipe engine"><span class="dot" style="background:#A644C5"></span>Carbone ICE</td><td class="bar" style="--c:#A644C540;--w:94.0%"><strong><span data-num="1451.858782535752" data-digits="0">1,452</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this."><span data-num="41.539500000000004" data-digits="0">42</span> ms</div></td><td class="bar" style="--c:#A644C540;--w:94.0%"><strong><span data-num="5347.955833015427" data-digits="0">5,348</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this."><span data-num="91.33794999999999" data-digits="0">91</span> ms</div></td><td class="bar" style="--c:#A644C540;--w:94.0%"><strong><span data-num="25" data-digits="0">25</span></strong></td></tr><tr><td class="pipe engine"><span class="dot" style="background:#ff7f0e"></span>LibreOffice</td><td class="bar" style="--c:#ff7f0e40;--w:34.1%"><strong><span data-num="527.121885222138" data-digits="0">527</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this."><span data-num="119.946" data-digits="0">120</span> ms</div></td><td class="bar" style="--c:#ff7f0e40;--w:36.6%"><strong><span data-num="2082.3897504776482" data-digits="0">2,082</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this."><span data-num="198.32039999999998" data-digits="0">198</span> ms</div></td><td class="bar" style="--c:#ff7f0e40;--w:33.8%"><strong><span data-num="9" data-digits="0">9</span></strong></td></tr><tr><td class="pipe engine"><span class="dot" style="background:#2ca02c"></span>OnlyOffice</td><td class="bar" style="--c:#2ca02c40;--w:8.3%"><strong><span data-num="127.48119121257986" data-digits="0">127</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this."><span data-num="478.493" data-digits="0">478</span> ms</div></td><td class="bar" style="--c:#2ca02c40;--w:7.8%"><strong><span data-num="445.66480673411405" data-digits="0">446</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this."><span data-num="1.0134981499999998" data-digits="2">1.01</span> s</div></td><td class="bar" style="--c:#2ca02c40;--w:8.1%"><strong><span data-num="2" data-digits="0">2</span></strong></td></tr>
+      </tbody>
+    </table>
     </div>
-    <article class="mode">
-      <p class="eyebrow">Convert to PDF</p>
-      <h3>DOCX → PDF</h3>
-      <div class="bars"><div class="bar-row">
-      <div class="bar-name">Carbone ICE</div>
-      <div class="bar-track"><div class="bar" style="width:100.0%;background:#A644C5"></div></div>
-      <div class="bar-value"><strong>172.9</strong> RPS<span class="muted"> · 57.5 ms</span></div>
-    </div><div class="bar-row">
-      <div class="bar-name">LibreOffice</div>
-      <div class="bar-track"><div class="bar" style="width:54.0%;background:#ff7f0e"></div></div>
-      <div class="bar-value"><strong>93.4</strong> RPS<span class="muted"> · 106.5 ms</span></div>
-    </div><div class="bar-row">
-      <div class="bar-name">OnlyOffice</div>
-      <div class="bar-track"><div class="bar" style="width:9.0%;background:#2ca02c"></div></div>
-      <div class="bar-value"><strong>15.6</strong> RPS<span class="muted"> · 624.0 ms</span></div>
-    </div></div>
-      <p class="muted">Fastest here: <strong>Carbone ICE</strong></p>
-      <table>
-    <thead><tr><th>Converter</th><th>1 CPU (RPS)</th><th>4 CPU (RPS)</th><th>Scaling</th></tr></thead>
-    <tbody><tr>
-      <td><span class="dot" style="background:#A644C5"></span>Carbone ICE</td>
-      <td><strong>58.0</strong><div class="muted">170.9 ms</div></td><td><strong>172.9</strong><div class="muted">57.5 ms</div></td>
-      <td>×3.0</td>
-    </tr><tr>
-      <td><span class="dot" style="background:#ff7f0e"></span>LibreOffice</td>
-      <td><strong>27.9</strong><div class="muted">352.3 ms</div></td><td><strong>93.4</strong><div class="muted">106.5 ms</div></td>
-      <td>×3.3</td>
-    </tr><tr>
-      <td><span class="dot" style="background:#2ca02c"></span>OnlyOffice</td>
-      <td><strong>4.3</strong><div class="muted">2120.8 ms</div></td><td><strong>15.6</strong><div class="muted">624.0 ms</div></td>
-      <td>×3.6</td>
-    </tr></tbody>
-  </table>
-    </article>
-  </section>
-<section class="card" id="ticket-qrcode-docx-1">
-    <div class="card-top">
-      <div class="card-intro">
-        <header>
-          <h2 class="template-name">ticket_qrcode</h2>
-          <p class="template-meta">
-            <span class="badge">DOCX</span>
-            <span class="badge badge-pages">1 page</span>
-          </p>
-          <p class="muted file"><a href="https://github.com/carboneio/document-generator-benchmark/blob/master/samples/template_qrcode.docx" target="_blank" rel="noopener">template_qrcode.docx</a> + <a href="https://github.com/carboneio/document-generator-benchmark/blob/master/samples/template_qrcode.json" target="_blank" rel="noopener">template_qrcode.json</a></p>
-        </header>
-        <article class="mode">
-          <p class="eyebrow">Merge only</p>
-          <h3>DOCX → DOCX</h3>
-          <p class="stat">70.3 <small>RPS @ 4 CPU</small></p>
-        </article>
-      </div>
-      <figure class="preview preview-landscape">
-    <img src="previews/template_qrcode.docx.jpg" alt="ticket_qrcode template preview" width="280"/>
-  </figure>
     </div>
-    <article class="mode">
-      <p class="eyebrow">Convert to PDF</p>
-      <h3>DOCX → PDF</h3>
-      <div class="bars"><div class="bar-row">
-      <div class="bar-name">Carbone ICE</div>
-      <div class="bar-track"><div class="bar" style="width:100.0%;background:#A644C5"></div></div>
-      <div class="bar-value"><strong>63.5</strong> RPS<span class="muted"> · 156.8 ms</span></div>
-    </div><div class="bar-row">
-      <div class="bar-name">LibreOffice</div>
-      <div class="bar-track"><div class="bar" style="width:93.5%;background:#ff7f0e"></div></div>
-      <div class="bar-value"><strong>59.4</strong> RPS<span class="muted"> · 167.1 ms</span></div>
-    </div><div class="bar-row">
-      <div class="bar-name">OnlyOffice</div>
-      <div class="bar-track"><div class="bar" style="width:17.9%;background:#2ca02c"></div></div>
-      <div class="bar-value"><strong>11.3</strong> RPS<span class="muted"> · 841.1 ms</span></div>
-    </div></div>
-      <p class="muted">Fastest here: <strong>Carbone ICE</strong></p>
-      <table>
-    <thead><tr><th>Converter</th><th>1 CPU (RPS)</th><th>4 CPU (RPS)</th><th>Scaling</th></tr></thead>
-    <tbody><tr>
-      <td><span class="dot" style="background:#A644C5"></span>Carbone ICE</td>
-      <td><strong>43.2</strong><div class="muted">229.2 ms</div></td><td><strong>63.5</strong><div class="muted">156.8 ms</div></td>
-      <td>×1.5</td>
-    </tr><tr>
-      <td><span class="dot" style="background:#ff7f0e"></span>LibreOffice</td>
-      <td><strong>16.9</strong><div class="muted">577.8 ms</div></td><td><strong>59.4</strong><div class="muted">167.1 ms</div></td>
-      <td>×3.5</td>
-    </tr><tr>
-      <td><span class="dot" style="background:#2ca02c"></span>OnlyOffice</td>
-      <td><strong>3.1</strong><div class="muted">2833.7 ms</div></td><td><strong>11.3</strong><div class="muted">841.1 ms</div></td>
-      <td>×3.6</td>
-    </tr></tbody>
-  </table>
-    </article>
   </section>
-<section class="card" id="invoice-simple-html-1">
-    <div class="card-top">
-      <div class="card-intro">
-        <header>
-          <h2 class="template-name">invoice_simple</h2>
-          <p class="template-meta">
-            <span class="badge">HTML</span>
-            <span class="badge badge-pages">1 page</span>
-          </p>
-          <p class="muted file"><a href="https://github.com/carboneio/document-generator-benchmark/blob/master/samples/template_incoice_simple.html" target="_blank" rel="noopener">template_incoice_simple.html</a> + <a href="https://github.com/carboneio/document-generator-benchmark/blob/master/samples/template_incoice_simple.json" target="_blank" rel="noopener">template_incoice_simple.json</a></p>
-        </header>
-        <article class="mode">
-          <p class="eyebrow">Merge only</p>
-          <h3>HTML → HTML</h3>
-          <p class="stat">1202.8 <small>RPS @ 4 CPU</small></p>
-        </article>
-      </div>
+<section class="card" id="invoice-simple-docx">
+    <header class="card-head">
+      <h2 class="template-name">invoice_simple</h2>
+      <p class="template-meta"><span class="badge">DOCX</span></p>
+    </header>
+    <div class="card-body">
       <figure class="preview">
-    <img src="previews/template_incoice_simple.html.jpg" alt="invoice_simple template preview" width="148"/>
+    <img src="previews/template_invoice_simple.docx.jpg" alt="invoice_simple template preview" width="795" height="1124"/>
   </figure>
+      <div class="card-data"><table class="grid">
+      <colgroup><col class="pipe"/><col/><col/><col/></colgroup>
+      <thead><tr>
+        <th></th>
+        <th><span class="unit">Doc/min</span>
+        <div class="muted hint" data-hint="A VU is a virtual user, sending one request after the other. One request in flight on 1 CPU: one document at a time, nothing waiting in a queue.">1 CPU · 1 VU</div></th><th><span class="unit">Doc/min</span>
+        <div class="muted hint" data-hint="A VU is a virtual user, sending one request after the other. 5 requests in flight on 4 CPU: the figures include the wait in the queue.">4 CPU · 5 VU</div></th>
+        <th><span class="unit">Pages/s</span>
+        <div class="muted hint" data-hint="Page generation speed for one large document, processed alone on a single CPU.">on large documents</div></th>
+      </tr></thead>
+      <tbody><tr class="apart"><td class="pipe group">DOCX → DOCX<div class="muted">merge only</div></td><td><strong><span data-num="8811.86664708474" data-digits="0">8,812</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this."><span data-num="7.5163" data-digits="1">7.5</span> ms</div></td><td><strong><span data-num="16731.967818848563" data-digits="0">16,732</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this."><span data-num="24.37455" data-digits="0">24</span> ms</div></td><td><strong><span data-num="986" data-digits="0">986</span></strong></td></tr></tbody><tbody>
+        <tr class="group-head"><th colspan="4">DOCX → PDF</th></tr>
+        <tr><td class="pipe engine"><span class="dot" style="background:#A644C5"></span>Carbone ICE</td><td class="bar" style="--c:#A644C540;--w:94.0%"><strong><span data-num="2460.529013737954" data-digits="0">2,461</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this."><span data-num="26.1287" data-digits="0">26</span> ms</div></td><td class="bar" style="--c:#A644C540;--w:94.0%"><strong><span data-num="8238.306753351962" data-digits="0">8,238</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this."><span data-num="58.86634999999998" data-digits="0">59</span> ms</div></td><td class="bar" style="--c:#A644C540;--w:94.0%"><strong><span data-num="154" data-digits="0">154</span></strong></td></tr><tr><td class="pipe engine"><span class="dot" style="background:#ff7f0e"></span>LibreOffice</td><td class="bar" style="--c:#ff7f0e40;--w:51.2%"><strong><span data-num="1339.2159634542843" data-digits="0">1,339</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this."><span data-num="49.3709" data-digits="0">49</span> ms</div></td><td class="bar" style="--c:#ff7f0e40;--w:64.6%"><strong><span data-num="5665.0269560866" data-digits="0">5,665</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this."><span data-num="62.07524999999998" data-digits="0">62</span> ms</div></td><td class="bar" style="--c:#ff7f0e40;--w:3.3%"><strong><span data-num="5" data-digits="0">5</span></strong></td></tr><tr><td class="pipe engine"><span class="dot" style="background:#2ca02c"></span>OnlyOffice</td><td class="bar" style="--c:#2ca02c40;--w:10.2%"><strong><span data-num="267.25343643377016" data-digits="0">267</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this."><span data-num="226.7698" data-digits="0">227</span> ms</div></td><td class="bar" style="--c:#2ca02c40;--w:11.1%"><strong><span data-num="970.94181517896" data-digits="0">971</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this."><span data-num="448.5577" data-digits="0">449</span> ms</div></td><td class="bar" style="--c:#2ca02c40;--w:17.4%"><strong><span data-num="29" data-digits="0">29</span></strong></td></tr>
+      </tbody>
+    </table>
     </div>
-    <article class="mode">
-      <p class="eyebrow">Convert to PDF</p>
-      <h3>HTML → PDF</h3>
-      <div class="bars"><div class="bar-row">
-      <div class="bar-name">Chromium</div>
-      <div class="bar-track"><div class="bar" style="width:100.0%;background:#358BBA"></div></div>
-      <div class="bar-value"><strong>329.4</strong> RPS<span class="muted"> · 30.2 ms</span></div>
-    </div></div>
-      <p class="muted">Fastest here: <strong>Chromium</strong></p>
-      <table>
-    <thead><tr><th>Converter</th><th>1 CPU (RPS)</th><th>4 CPU (RPS)</th><th>Scaling</th></tr></thead>
-    <tbody><tr>
-      <td><span class="dot" style="background:#358BBA"></span>Chromium</td>
-      <td><strong>118.1</strong><div class="muted">84.2 ms</div></td><td><strong>329.4</strong><div class="muted">30.2 ms</div></td>
-      <td>×2.8</td>
-    </tr></tbody>
-  </table>
-    </article>
+    </div>
   </section>
-    </section>
+<section class="card" id="ticket-qrcode-docx">
+    <header class="card-head">
+      <h2 class="template-name">ticket_qrcode</h2>
+      <p class="template-meta"><span class="badge">DOCX</span></p>
+    </header>
+    <div class="card-body">
+      <figure class="preview">
+    <img src="previews/template_qrcode.docx.jpg" alt="ticket_qrcode template preview" width="673" height="417"/>
+  </figure>
+      <div class="card-data"><table class="grid">
+      <colgroup><col class="pipe"/><col/><col/><col/></colgroup>
+      <thead><tr>
+        <th></th>
+        <th><span class="unit">Doc/min</span>
+        <div class="muted hint" data-hint="A VU is a virtual user, sending one request after the other. One request in flight on 1 CPU: one document at a time, nothing waiting in a queue.">1 CPU · 1 VU</div></th><th><span class="unit">Doc/min</span>
+        <div class="muted hint" data-hint="A VU is a virtual user, sending one request after the other. 5 requests in flight on 4 CPU: the figures include the wait in the queue.">4 CPU · 5 VU</div></th>
+        <th><span class="unit">Pages/s</span>
+        <div class="muted hint" data-hint="Page generation speed for one document, processed alone on a single CPU.">on 1 page</div></th>
+      </tr></thead>
+      <tbody><tr class="apart"><td class="pipe group">DOCX → DOCX<div class="muted">merge only</div></td><td><strong><span data-num="2889.2455858747994" data-digits="0">2,889</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this."><span data-num="24.8945" data-digits="0">25</span> ms</div></td><td><strong><span data-num="4268.07494170521" data-digits="0">4,268</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this."><span data-num="96.29045" data-digits="0">96</span> ms</div></td><td><strong><span data-num="55" data-digits="0">55</span></strong></td></tr></tbody><tbody>
+        <tr class="group-head"><th colspan="4">DOCX → PDF</th></tr>
+        <tr><td class="pipe engine"><span class="dot" style="background:#A644C5"></span>Carbone ICE</td><td class="bar" style="--c:#A644C540;--w:94.0%"><strong><span data-num="1415.1165898834888" data-digits="0">1,415</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this."><span data-num="45.486200000000004" data-digits="0">45</span> ms</div></td><td class="bar" style="--c:#A644C540;--w:94.0%"><strong><span data-num="3513.7157895846435" data-digits="0">3,514</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this."><span data-num="116.48179999999999" data-digits="0">116</span> ms</div></td><td class="bar" style="--c:#A644C540;--w:94.0%"><strong><span data-num="24" data-digits="0">24</span></strong></td></tr><tr><td class="pipe engine"><span class="dot" style="background:#ff7f0e"></span>LibreOffice</td><td class="bar" style="--c:#ff7f0e40;--w:51.5%"><strong><span data-num="775.8453481606001" data-digits="0">776</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this."><span data-num="77.8599" data-digits="0">78</span> ms</div></td><td class="bar" style="--c:#ff7f0e40;--w:73.3%"><strong><span data-num="2740.7923082404664" data-digits="0">2,741</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this."><span data-num="137.03255" data-digits="0">137</span> ms</div></td><td class="bar" style="--c:#ff7f0e40;--w:51.6%"><strong><span data-num="13" data-digits="0">13</span></strong></td></tr><tr><td class="pipe engine"><span class="dot" style="background:#2ca02c"></span>OnlyOffice</td><td class="bar" style="--c:#2ca02c40;--w:12.7%"><strong><span data-num="191.87290338879527" data-digits="0">192</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this."><span data-num="315.0302" data-digits="0">315</span> ms</div></td><td class="bar" style="--c:#2ca02c40;--w:19.5%"><strong><span data-num="727.629750937187" data-digits="0">728</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this."><span data-num="550.5103" data-digits="0">551</span> ms</div></td><td class="bar" style="--c:#2ca02c40;--w:12.6%"><strong><span data-num="3" data-digits="0">3</span></strong></td></tr>
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </section>
+<section class="card" id="invoice-simple-html">
+    <header class="card-head">
+      <h2 class="template-name">invoice_simple</h2>
+      <p class="template-meta"><span class="badge">HTML</span></p>
+    </header>
+    <div class="card-body">
+      <figure class="preview">
+    <img src="previews/template_invoice_simple.html.jpg" alt="invoice_simple template preview" width="795" height="1124"/>
+  </figure>
+      <div class="card-data"><table class="grid">
+      <colgroup><col class="pipe"/><col/><col/><col/></colgroup>
+      <thead><tr>
+        <th></th>
+        <th><span class="unit">Doc/min</span>
+        <div class="muted hint" data-hint="A VU is a virtual user, sending one request after the other. One request in flight on 1 CPU: one document at a time, nothing waiting in a queue.">1 CPU · 1 VU</div></th><th><span class="unit">Doc/min</span>
+        <div class="muted hint" data-hint="A VU is a virtual user, sending one request after the other. 5 requests in flight on 4 CPU: the figures include the wait in the queue.">4 CPU · 5 VU</div></th>
+        <th><span class="unit">Pages/s</span>
+        <div class="muted hint" data-hint="Page generation speed for one large document, processed alone on a single CPU.">on large documents</div></th>
+      </tr></thead>
+      <tbody><tr class="apart"><td class="pipe group">HTML → HTML<div class="muted">merge only</div></td><td><strong><span data-num="14679.497634969826" data-digits="0">14,679</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this."><span data-num="4.362900000000001" data-digits="1">4.4</span> ms</div></td><td><strong><span data-num="47450.710574390854" data-digits="0">47,451</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this."><span data-num="10.585449999999977" data-digits="0">11</span> ms</div></td><td><strong><span data-num="2275" data-digits="0">2,275</span></strong></td></tr></tbody><tbody>
+        <tr class="group-head"><th colspan="4">HTML → PDF</th></tr>
+        <tr><td class="pipe engine"><span class="dot" style="background:#358BBA"></span>Chromium</td><td><strong><span data-num="4727.88400924564" data-digits="0">4,728</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this."><span data-num="13.154300000000001" data-digits="0">13</span> ms</div></td><td><strong><span data-num="19061.476438426664" data-digits="0">19,061</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this."><span data-num="22.31724999999998" data-digits="0">22</span> ms</div></td><td><strong><span data-num="92" data-digits="0">92</span></strong></td></tr>
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </section>
     <section class="card" id="history">
     <h2>Previous benchmarks</h2>
     <p class="muted">Each campaign writes a dated page. Latest is also <a href="index.html">index.html</a>.</p>
-    <ul class="history"><li><strong>2026-08-22 08:50:10 UTC</strong> — this report</li><li><a href="2026-08-21T22-44-27-607Z.html">2026-08-21 22:44:27 UTC</a> · 18 runs</li></ul>
+    <ul class="history"><li><strong>2026-08-27 20:56:21 UTC</strong> — this report</li></ul>
   </section>
   </main>
   <footer class="wrap">Generated by <code>npm run bench</code> / <code>npm run report</code>. Raw metrics: RESULT.md.</footer>
+  <script>
+(function () {
+  if (window.Intl === undefined) { return; }
+
+  var format = function (digits) {
+    try {
+      return new Intl.NumberFormat(navigator.language || undefined, {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits
+      });
+    } catch (error) {
+      return null;
+    }
+  };
+  var cells = document.querySelectorAll('[data-num]');
+  var formatters = {};
+
+  for (var i = 0; i < cells.length; i++) {
+    var value = Number(cells[i].getAttribute('data-num'));
+    var digits = Number(cells[i].getAttribute('data-digits')) || 0;
+
+    if (isFinite(value) === false) { continue; }
+    if (formatters[digits] === undefined) { formatters[digits] = format(digits); }
+    if (formatters[digits] === null) { return; }
+
+    cells[i].textContent = formatters[digits].format(value);
+  }
+})();
+</script>
 </body>
 </html>

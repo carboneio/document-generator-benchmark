@@ -12,8 +12,8 @@
  * The measured requests are `POST /render/:templateVersionId` and only carry
  * the JSON dataset: uploading the template is not part of what is measured.
  *
- *   node bench/run.mjs                       full benchmark (1 and 4 CPU, 10 VU)
- *   node bench/run.mjs --duration 10s        quick check
+ *   node bench/run.mjs                       full benchmark (1 and 4 CPU)
+ *   node bench/run.mjs --renders 20          quick check
  *   node bench/run.mjs --cpus 4 --no-docker  use a Carbone server you started yourself
  *   node bench/run.mjs --dry-run             only print what would be executed
  */
@@ -24,7 +24,7 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
-import { buildMatrix, buildPayload, discoverSamples, looksValid, readData, ROOT_DIR } from './matrix.mjs';
+import { BIG_PAGES, BIG_RENDERS, buildMatrix, buildPayload, buildProfiles, discoverSamples, looksValid, PROFILES, readData, RENDER_TIMEOUT, ROOT_DIR } from './matrix.mjs';
 import { generateReport } from './report.mjs';
 
 const PREVIEWS_DIR = path.join(ROOT_DIR, 'docs', 'previews');
@@ -34,8 +34,10 @@ const DEFAULTS = {
   container : 'carbone-bench',
   port      : 4000,
   cpus      : '1,4',
-  vus       : '10',
-  duration  : '30s',
+  vus       : String(PROFILES.load.vus),
+  renders   : PROFILES.load.renders,
+  soloRenders : PROFILES.solo.renders,
+  maxDuration : PROFILES.load.maxDuration,
   warmup    : 3,
   warmupRetries : 3,
   cooldown  : 3,
@@ -51,7 +53,9 @@ function parseArgs (argv) {
     port       : Number(process.env.CARBONE_PORT || DEFAULTS.port),
     cpus       : String(process.env.CARBONE_CPUS || DEFAULTS.cpus),
     vus        : String(process.env.CARBONE_VUS || DEFAULTS.vus),
-    duration   : process.env.CARBONE_DURATION || DEFAULTS.duration,
+    renders    : Number(process.env.CARBONE_RENDERS || DEFAULTS.renders),
+    soloRenders : Number(process.env.CARBONE_SOLO_RENDERS || DEFAULTS.soloRenders),
+    maxDuration : process.env.CARBONE_MAX_DURATION || DEFAULTS.maxDuration,
     warmup     : Number(process.env.CARBONE_WARMUP ?? DEFAULTS.warmup),
     cooldown   : Number(process.env.CARBONE_COOLDOWN ?? DEFAULTS.cooldown),
     results    : process.env.CARBONE_RESULTS || DEFAULTS.results,
@@ -64,6 +68,7 @@ function parseArgs (argv) {
     requestTimeout : Number(process.env.CARBONE_REQUEST_TIMEOUT || DEFAULTS.requestTimeout),
     filter     : '',
     docker     : true,
+    solo       : true,
     dryRun     : false,
     keep       : false,
   };
@@ -84,7 +89,9 @@ function parseArgs (argv) {
       case '--port':         options.port = Number(next()); break;
       case '--cpus':         options.cpus = next(); break;
       case '--vus':          options.vus = next(); break;
-      case '--duration':     options.duration = next(); break;
+      case '--renders':      options.renders = Number(next()); break;
+      case '--solo-renders': options.soloRenders = Number(next()); break;
+      case '--max-duration': options.maxDuration = next(); break;
       case '--warmup':       options.warmup = Number(next()); break;
       case '--warmup-retries': options.warmupRetries = Number(next()); break;
       case '--cooldown':     options.cooldown = Number(next()); break;
@@ -98,6 +105,7 @@ function parseArgs (argv) {
       case '--request-timeout': options.requestTimeout = Number(next()); break;
       case '--filter':       options.filter = next(); break;
       case '--no-docker':    options.docker = false; break;
+      case '--no-solo':      options.solo = false; break;
       case '--keep':         options.keep = true; break;
       case '--dry-run':      options.dryRun = true; break;
       case '-h':
@@ -114,6 +122,12 @@ function parseArgs (argv) {
     throw new Error('--vus must be a positive number, ex: 10');
   }
 
+  options.profiles = buildProfiles({
+    cpus : options.cpuList,
+    solo : options.solo === true ? { renders: options.soloRenders } : null,
+    load : { vus: options.vuList, renders: options.renders, maxDuration: options.maxDuration },
+  });
+
   return options;
 }
 
@@ -121,8 +135,11 @@ const HELP = `
 Usage: node bench/run.mjs [options]
 
   --cpus <list>       Carbone factories to benchmark            (default ${DEFAULTS.cpus})
-  --duration <time>   k6 duration per run                       (default ${DEFAULTS.duration})
-  --vus <n>           concurrent virtual users                   (default ${DEFAULTS.vus})
+  --renders <n>       documents per virtual user, under load     (default ${DEFAULTS.renders})
+  --solo-renders <n>  documents of the one-at-a-time run         (default ${DEFAULTS.soloRenders})
+  --no-solo           skip the one-at-a-time run
+  --max-duration <t>  give up on a run after that long           (default ${DEFAULTS.maxDuration})
+  --vus <n>           concurrent virtual users, under load       (default ${DEFAULTS.vus})
   --filter <text>     only run matrix entries matching <text>
   --image <image>     Carbone docker image                       (default ${DEFAULTS.image})
   --port <port>       host port bound to the container           (default ${DEFAULTS.port})
@@ -134,7 +151,7 @@ Usage: node bench/run.mjs [options]
   --startup-timeout <sec>  how long to wait for Carbone to listen (default ${DEFAULTS.startupTimeout})
   --request-timeout <sec>  give up on a warmup render after n seconds (default ${DEFAULTS.requestTimeout})
   --no-docker         do not manage docker, use the running Carbone server
-  --warmup <number>   warmup renders before each run             (default ${DEFAULTS.warmup})
+  --warmup <number>   warmup renders per pipeline, none over ${BIG_PAGES} pages (default ${DEFAULTS.warmup})
   --warmup-retries <n>  extra warmup attempts on connection reset (default ${DEFAULTS.warmupRetries})
   --cooldown <sec>    pause between runs                         (default ${DEFAULTS.cooldown})
   --results <dir>     where JSON results are written             (default ${DEFAULTS.results})
@@ -159,6 +176,19 @@ function requireBinary (name, versionArgs) {
 }
 
 const sleep = (seconds) => new Promise((resolve) => setTimeout(resolve, seconds * 1000));
+
+/** k6 durations, ex: "120s" or "10m", in milliseconds. */
+function durationMs (value) {
+  const match = /^(\d+(?:\.\d+)?)(ms|s|m|h)?$/.exec(String(value ?? '').trim());
+
+  if (match === null) {
+    return 0;
+  }
+
+  const scale = { ms: 1, s: 1000, m: 60000, h: 3600000 };
+
+  return Number(match[1]) * (scale[match[2] ?? 's'] ?? 1000);
+}
 
 /* ------------------------------------------------------------------ docker */
 
@@ -466,28 +496,34 @@ function uploadTemplate (options, sample) {
  * JSON dataset instead of the base64 template.
  *
  * A container starts with an empty template storage, hence one upload round per
- * container.
+ * container. Samples sharing a template file (the page variants of a same
+ * document) share its upload.
  *
  * @return {Map} sample id -> { versionId, error }, one entry per sample
  */
 async function uploadTemplates (options, samples) {
-  const templates = new Map();
+  const uploads = new Map();
+  const files = new Set(samples.map((sample) => sample.templateFile));
 
-  log(`\nUploading ${samples.length} template${samples.length > 1 ? 's' : ''} (POST /template)`);
+  log(`\nUploading ${files.size} template${files.size > 1 ? 's' : ''} (POST /template)`);
 
   for (const sample of samples) {
+    if (uploads.has(sample.templateFile) === true) {
+      continue;
+    }
+
     try {
       const versionId = await uploadTemplate(options, sample);
 
-      templates.set(sample.id, { versionId: versionId, error: null });
+      uploads.set(sample.templateFile, { versionId: versionId, error: null });
       log(`  ${sample.templateFile} → ${versionId}`);
     } catch (error) {
-      templates.set(sample.id, { versionId: null, error: `POST /template failed: ${error.message}` });
+      uploads.set(sample.templateFile, { versionId: null, error: `POST /template failed: ${error.message}` });
       log(`  ⚠ ${sample.templateFile}: ${error.message}`);
     }
   }
 
-  return templates;
+  return new Map(samples.map((sample) => [sample.id, uploads.get(sample.templateFile)]));
 }
 
 /** The samples the runs actually use, `--filter` can select a subset. */
@@ -508,8 +544,12 @@ function usedSamples (samples, runs) {
  * document, not when one attempt out of three failed.
  */
 async function warmup (options, run, payload, templateId) {
-  const wanted = Math.max(1, options.warmup);
+  // A big document is not warmed up: its renders cost seconds each. One is
+  // still needed when nothing else has exercised the pipeline yet, to tell a
+  // disabled converter from a slow one
+  const wanted = run.warmup === 0 ? 1 : Math.max(1, options.warmup);
   const maxAttempts = wanted + Math.max(2, options.warmupRetries);
+  const timeoutMs = Math.max(options.requestTimeout * 1000, durationMs(run.timeout));
   let successes = 0;
   let lastError = 'no attempt';
   let attempt = 0;
@@ -523,7 +563,7 @@ async function warmup (options, run, payload, templateId) {
     const elapsed = () => `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
 
     try {
-      const { status, body } = await postJson(options, renderPath(templateId), payload, options.requestTimeout * 1000);
+      const { status, body } = await postJson(options, renderPath(templateId), payload, timeoutMs);
 
       if (status !== 200) {
         lastError = `HTTP ${status} ${body.toString('utf8').slice(0, 300)}`;
@@ -627,8 +667,28 @@ async function primeLibreOffice (options, sample, templateId) {
   });
 }
 
+/**
+ * One preview per template file, rendered from its smallest dataset: the page
+ * variants of a same document share the same first page.
+ */
+function previewTargets (samples) {
+  const smallest = new Map();
+
+  for (const sample of samples) {
+    const current = smallest.get(sample.templateFile);
+
+    if (current === undefined || sample.pages < current.pages) {
+      smallest.set(sample.templateFile, sample);
+    }
+  }
+
+  return [...smallest.values()];
+}
+
 /** Renders the first page of every template as a JPG for the HTML report. */
-async function generatePreviews (options, samples, templates) {
+async function generatePreviews (options, allSamples, templates) {
+  const samples = previewTargets(allSamples);
+
   fs.mkdirSync(PREVIEWS_DIR, { recursive: true });
   log(`\nGenerating ${samples.length} template preview${samples.length > 1 ? 's' : ''} (first page → JPG)`);
 
@@ -699,10 +759,12 @@ function runK6 (options, run, templateId, payloadPath, summaryPath) {
       ...process.env,
       CARBONE_PAYLOAD  : payloadPath,
       CARBONE_SUMMARY  : summaryPath,
-      CARBONE_URL      : renderUrl(options, templateId),
-      CARBONE_LABEL    : run.label,
-      CARBONE_VUS      : String(run.vus),
-      CARBONE_DURATION : options.duration,
+      CARBONE_URL          : renderUrl(options, templateId),
+      CARBONE_LABEL        : run.label,
+      CARBONE_VUS          : String(run.vus),
+      CARBONE_RENDERS      : String(run.renders),
+      CARBONE_MAX_DURATION : run.maxDuration,
+      CARBONE_TIMEOUT      : run.timeout,
     },
   });
 
@@ -733,7 +795,7 @@ async function main () {
   }
 
   const samples = discoverSamples();
-  let runs = buildMatrix({ samples, cpus: options.cpuList, vus: options.vuList });
+  let runs = buildMatrix({ samples, profiles: options.profiles, warmup: options.warmup });
 
   if (options.filter !== '') {
     const needle = options.filter.toLowerCase();
@@ -753,9 +815,14 @@ async function main () {
   log(`  endpoint ...... ${renderUrl(options, ':templateVersionId')}`);
   log(`  factories ..... ${options.cpuList.join(', ')} CPU`);
   log(`  license ....... ${describeLicense(options)}`);
-  log(`  load .......... ${options.vuList.join(', ')} VU during ${options.duration} per run`);
+  for (const line of describeProfiles(options.profiles)) {
+    log(`  ${line}`);
+  }
+  if (runs.some((run) => run.warmup === 0) === true) {
+    log(`  big documents . over ${BIG_PAGES} pages: ${BIG_RENDERS} renders, no warmup, ${RENDER_TIMEOUT} max each`);
+  }
   log(`  samples ....... ${samples.length}`);
-  log(`  runs .......... ${runs.length} (~${Math.ceil(runs.length * (parseDuration(options.duration) + options.cooldown + 5) / 60)} min)`);
+  log(`  runs .......... ${runs.length}`);
   log('');
   for (const run of runs) {
     log(`  · ${run.label}`);
@@ -781,8 +848,8 @@ async function main () {
     startedAt : new Date().toISOString(),
     image     : options.docker === true ? options.image : 'unknown (docker not managed by the runner)',
     license   : describeLicense(options),
-    vus       : options.vuList,
-    duration  : options.duration,
+    profiles  : options.profiles,
+    vus       : [...new Set(options.profiles.map((profile) => profile.vus))].sort((a, b) => a - b),
     cpus      : options.cpuList,
     k6        : k6Version,
     docker    : dockerVersion,
@@ -805,7 +872,9 @@ async function main () {
   const results = [];
   let currentCpu = null;
   const warmed = new Set();
-  const warmupKey = (run) => `${run.sampleId}|${run.converter}|${run.cpu}`;
+  // Spawning the converter workers depends on the template and the engine, not
+  // on the dataset: warming up the one page document also warms up the big one
+  const warmupKey = (run) => `${run.templateFile}|${run.converter}|${run.cpu}`;
 
   const used = usedSamples(samples, runs);
   let templates = new Map();
@@ -947,8 +1016,12 @@ function runMeta (run) {
     templateFile  : run.templateFile,
     templateExt   : run.templateExt,
     dataFile      : run.dataFile,
+    profile       : run.profile,
     cpu           : run.cpu,
     vus           : run.vus,
+    renders       : run.renders,
+    maxDuration   : run.maxDuration,
+    timeout       : run.timeout,
     convertTo     : run.convertTo,
     converter     : run.converter,
     converterName : run.converterName,
@@ -957,18 +1030,21 @@ function runMeta (run) {
   };
 }
 
-/** '30s' -> 30, '2m' -> 120 */
-function parseDuration (duration) {
-  const match = /^([\d.]+)(ms|s|m|h)?$/.exec(duration.trim());
+/** The two measures of the campaign, as printed in the runner header. */
+function describeProfiles (profiles) {
+  const solo = profiles.find((profile) => profile.id === 'solo');
+  const load = profiles.filter((profile) => profile.id === 'load');
+  const vus = [...new Set(load.map((profile) => profile.vus))].join(', ');
+  const lines = [];
 
-  if (match === null) {
-    return 30;
+  if (solo !== undefined) {
+    lines.push(`one at a time . ${solo.renders} documents, 1 VU on ${solo.cpu} CPU (no queue)`);
+  }
+  if (load.length > 0) {
+    lines.push(`under load .... ${load[0].renders} documents per VU, ${vus} VU, up to ${load[0].maxDuration} each`);
   }
 
-  const value = Number(match[1]);
-  const factors = { ms: 0.001, s: 1, m: 60, h: 3600 };
-
-  return value * (factors[match[2] || 's']);
+  return lines;
 }
 
 function fail (error) {

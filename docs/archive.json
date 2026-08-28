@@ -1,18 +1,10 @@
 [
   {
-    "id": "2026-08-22T08-50-10-865Z",
-    "file": "2026-08-22T08-50-10-865Z.html",
-    "date": "2026-08-22T08:50:10.865Z",
+    "id": "2026-08-27T20-56-21-089Z",
+    "file": "2026-08-27T20-56-21-089Z.html",
+    "date": "2026-08-27T20:56:21.089Z",
     "image": "carbone/carbone-ee:full-5.14.0",
-    "measured": 18,
-    "templates": 4
-  },
-  {
-    "id": "2026-08-21T22-44-27-607Z",
-    "file": "2026-08-21T22-44-27-607Z.html",
-    "date": "2026-08-21T22:44:27.607Z",
-    "image": "carbone/carbone-ee:full-5.14.0",
-    "measured": 18,
+    "measured": 34,
     "templates": 4
   }
 ]

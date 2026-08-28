@@ -46,7 +46,8 @@ function readResults (resultsDir) {
 }
 
 function buildCsv (rows) {
-  const header = ['Vendor', 'Sample', 'Family', 'Pages', 'Template', 'Output', 'Converter', 'CPU', 'VU', 'Avg(ms)', 'p95(ms)', 'Max(ms)', 'RPS', 'Requests', 'Failures(%)', 'Label'];
+  const header = ['Vendor', 'Sample', 'Family', 'Pages', 'Template', 'Output', 'Converter', 'Profile', 'CPU', 'VU',
+    'Med(ms)', 'Avg(ms)', 'p95(ms)', 'Max(ms)', 'RPS', 'Pages/s', 'Requests', 'Failures(%)', 'Label'];
   const lines = [header.map((cell) => `"${cell}"`).join(',')];
 
   for (const row of rows) {
@@ -58,12 +59,15 @@ function buildCsv (rows) {
       row.template,
       row.output,
       row.converter === '—' ? 'none' : row.converter,
+      row.profile,
       row.cpu,
       row.vus,
+      num(row.med),
       num(row.avg),
       num(row.p95),
       num(row.max),
       num(row.rps),
+      num(row.rps === null ? null : row.rps * row.pages),
       row.requests,
       num(row.failures),
       row.label,
@@ -73,10 +77,37 @@ function buildCsv (rows) {
   return `${lines.join('\n')}\n`;
 }
 
+/** The two measures of the campaign, one line for the environment table. */
 function formatLoad (meta) {
-  const vus = Array.isArray(meta?.vus) === true ? meta.vus.join(', ') : (meta?.vus ?? '?');
+  const profiles = Array.isArray(meta?.profiles) === true ? meta.profiles : [];
 
-  return `${vus} VU during ${meta?.duration ?? '?'} each`;
+  if (profiles.length === 0) {
+    return `${Array.isArray(meta?.vus) === true ? meta.vus.join(', ') : (meta?.vus ?? '?')} VU`;
+  }
+
+  return profiles
+    .map((profile) => `${profile.renders} documents ${profile.id === 'solo' ? 'one at a time' : `× ${profile.vus} VU`} on ${profile.cpu} CPU`)
+    .join(' · ');
+}
+
+const GROUP_ORDER = ['merge', 'I', 'L', 'O', 'C'];
+
+/**
+ * Keeps both measures of the same pipeline together, so two campaigns can be
+ * diffed line by line.
+ */
+function byPipeline (a, b) {
+  const rank = (row) => [
+    row.family,
+    row.raw.templateExt,
+    String(GROUP_ORDER.indexOf(row.raw.group)),
+    String(row.pages).padStart(6, '0'),
+    row.profile === 'solo' ? '0' : '1',
+    String(row.cpu).padStart(3, '0'),
+    String(row.vus).padStart(4, '0'),
+  ].join('|');
+
+  return rank(a).localeCompare(rank(b));
 }
 
 function buildResultMd (rows, meta) {
@@ -106,8 +137,9 @@ function buildResultMd (rows, meta) {
 
   parts.push('## Detailed metrics', '');
 
-  for (const row of rows.sort((a, b) => (b.rps ?? 0) - (a.rps ?? 0))) {
+  for (const row of [...rows].sort(byPipeline)) {
     const latency = row.raw.metrics.latency;
+    const pagesPerSecond = row.rps === null ? null : row.rps * row.pages;
 
     parts.push(`### ${row.label}`, '');
     parts.push(`- vendor: \`${row.vendor}\``);
@@ -115,9 +147,20 @@ function buildResultMd (rows, meta) {
     parts.push(`- data: \`${row.raw.dataFile ?? '{}'}\``);
     parts.push(`- pages: ${row.pages}`);
     parts.push(`- request: \`convertTo: ${row.raw.convertTo ?? 'none'}\`, \`converter: ${row.raw.converter ?? 'none'}\`, \`factories: ${row.cpu}\`, \`vus: ${row.vus}\``);
+    parts.push(`- profile: \`${row.profile}\`, ${row.raw.renders ?? '?'} renders per VU, up to \`${row.raw.maxDuration ?? '?'}\``);
     parts.push('');
     parts.push('```');
-    parts.push(`requests ...........: ${row.requests} (${num(row.rps)}/s)`);
+    parts.push(`documents ..........: ${row.requests}`);
+
+    // Under load the rate is the result; alone it is the time of one document
+    if (row.raw.outOfScale === true) {
+      parts.push(`out of scale .......: no document within ${row.raw.timeout ?? '?'}`);
+    } else if (row.profile === 'solo') {
+      parts.push(`one document .......: ${num(row.med)} ms, ${num(pagesPerSecond)} pages/s`);
+    } else {
+      parts.push(`throughput .........: ${num(row.rps)} doc/s, ${num(row.rps === null ? null : row.rps * 60, 0)} doc/min, ${num(pagesPerSecond)} pages/s`);
+    }
+
     parts.push(`failures ...........: ${num(row.failures)} %`);
     parts.push(`latency ............: avg=${num(latency.avg)}ms min=${num(latency.min)}ms med=${num(latency.med)}ms max=${num(latency.max)}ms p(90)=${num(latency.p90)}ms p(95)=${num(latency.p95)}ms p(99)=${num(latency.p99)}ms`);
     parts.push('```');
@@ -201,7 +244,7 @@ function writeHtmlCampaign (model) {
     file      : filename,
     date      : model.meta?.finishedAt || model.meta?.startedAt || new Date().toISOString(),
     image     : model.meta?.image || null,
-    measured  : model.templates.reduce((count, item) => count + item.chartRows.length + Object.keys(item.merge).length, 0),
+    measured  : model.measured,
     templates : model.templates.length,
   });
 

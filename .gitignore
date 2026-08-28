@@ -39,6 +39,7 @@ yarn-error.log*
 node_modules/
 results/*
 
-# LibreOffice lock files
+# LibreOffice and Word lock files
 .~lock.*#
+~$*
 

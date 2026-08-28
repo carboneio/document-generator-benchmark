@@ -13,7 +13,9 @@
  *   CARBONE_PAYLOAD   path to the JSON body posted to Carbone   (required)
  *   CARBONE_URL       POST /render/:templateVersionId endpoint   (required)
  *   CARBONE_VUS       concurrent virtual users                  (default 10)
- *   CARBONE_DURATION  test duration                             (default 30s)
+ *   CARBONE_RENDERS   documents to generate per virtual user    (default 100)
+ *   CARBONE_MAX_DURATION  give up after that long              (default 60s)
+ *   CARBONE_TIMEOUT   give up on a single render after that     (default 120s)
  *   CARBONE_MAX_P95   p(95) latency threshold in ms             (default 10000)
  *   CARBONE_LABEL     human readable name of the run            (default carbone)
  *   CARBONE_SUMMARY   path of the JSON summary to write         (optional)
@@ -30,7 +32,9 @@ const URL      = __ENV.CARBONE_URL;
 const LABEL    = __ENV.CARBONE_LABEL || 'carbone';
 const SUMMARY  = __ENV.CARBONE_SUMMARY || '';
 const VUS      = Number(__ENV.CARBONE_VUS || 10);
-const DURATION = __ENV.CARBONE_DURATION || '30s';
+const RENDERS  = Number(__ENV.CARBONE_RENDERS || 100);
+const MAX_TIME = __ENV.CARBONE_MAX_DURATION || '60s';
+const TIMEOUT  = __ENV.CARBONE_TIMEOUT || '120s';
 const MAX_P95  = Number(__ENV.CARBONE_MAX_P95 || 10000);
 
 if (!URL) {
@@ -38,8 +42,20 @@ if (!URL) {
 }
 
 export const options = {
-  vus                    : VUS,
-  duration               : DURATION,
+  scenarios : {
+    // A fixed number of documents per user rather than a fixed duration: a
+    // 200 page PDF and a one page merge are then measured on the same amount of
+    // work. `per-vu-iterations` keeps the concurrency constant to the end, where
+    // `shared-iterations` would let the fast users starve the others.
+    carbone : {
+      executor     : 'per-vu-iterations',
+      vus          : VUS,
+      iterations   : RENDERS,
+      maxDuration  : MAX_TIME,
+      // Enough for a render in flight to finish instead of being counted as failed
+      gracefulStop : '60s',
+    },
+  },
   // The server is what we measure: do not spend k6 CPU on response bodies
   discardResponseBodies  : true,
   summaryTrendStats      : ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
@@ -49,16 +65,43 @@ export const options = {
   },
 };
 
-const carboneLatency = new Trend('carbone_latency', true);
-const carboneErrors  = new Counter('carbone_errors');
+const carboneLatency  = new Trend('carbone_latency', true);
+const carboneErrors   = new Counter('carbone_errors');
+const carboneTimeouts = new Counter('carbone_timeouts');
 
 const params = {
   headers : { 'Content-Type': 'application/json' },
   tags    : { run: LABEL },
+  timeout : TIMEOUT,
 };
 
+/**
+ * A pipeline that cannot deliver one document within the timeout is out of
+ * scale: measuring it again would only cost minutes, so the virtual user stops
+ * asking. k6 gives each of them its own module scope, which is exactly the
+ * granularity wanted here.
+ */
+let outOfScale = false;
+
+/** k6 reports a timed out request as status 0 with error code 1050. */
+function isTimeout (res) {
+  return res.error_code === 1050 || /timeout|deadline exceeded/i.test(res.error || '');
+}
+
 export default function () {
+  if (outOfScale === true) {
+    return;
+  }
+
   const res = http.post(URL, PAYLOAD, params);
+
+  if (isTimeout(res) === true) {
+    outOfScale = true;
+    carboneTimeouts.add(1);
+    carboneErrors.add(1);
+
+    return;
+  }
 
   carboneLatency.add(res.timings.duration);
 
@@ -66,10 +109,7 @@ export default function () {
     carboneErrors.add(1);
   }
 
-  check(res, {
-    'status is 200'  : (r) => r.status === 200,
-    'duration < 30s' : (r) => r.timings.duration < 30000,
-  });
+  check(res, { 'status is 200': (r) => r.status === 200 });
 }
 
 function trend (metrics, name) {
@@ -116,12 +156,19 @@ export function handleSummary (data) {
   const thresholds = thresholdsOf(metrics);
   const allOk      = Object.values(thresholds).every((ok) => ok === true);
 
+  const timeouts = counter(metrics, 'carbone_timeouts').count;
+
   const summary = {
-    label      : LABEL,
-    url        : URL,
-    vus        : VUS,
-    duration   : DURATION,
-    finishedAt : new Date().toISOString(),
+    label       : LABEL,
+    url         : URL,
+    vus         : VUS,
+    renders     : RENDERS,
+    maxDuration : MAX_TIME,
+    timeout     : TIMEOUT,
+    // No document within the timeout: the report shows it as out of scale
+    // instead of publishing the timeout itself as a duration
+    outOfScale  : timeouts > 0 && requests.count <= timeouts,
+    finishedAt  : new Date().toISOString(),
     metrics    : {
       latency           : latency,
       carboneLatency    : trend(metrics, 'carbone_latency'),
@@ -131,6 +178,7 @@ export function handleSummary (data) {
       rps               : requests.rate,
       failureRate       : failed.rate ?? 0,
       errors            : counter(metrics, 'carbone_errors').count,
+      timeouts          : timeouts,
       checks            : counter(metrics, 'checks'),
       dataReceived      : counter(metrics, 'data_received'),
       dataSent          : counter(metrics, 'data_sent'),
@@ -139,16 +187,23 @@ export function handleSummary (data) {
     thresholdsPassed  : allOk,
   };
 
-  const stdout = [
-    '',
-    `  ── ${LABEL}`,
-    `     requests ...... ${requests.count} (${fixed(requests.rate)} RPS)`,
-    `     latency avg ... ${fixed(latency.avg)} ms`,
-    `     latency p95 ... ${fixed(latency.p95)} ms`,
-    `     failures ...... ${fixed((failed.rate ?? 0) * 100)} %`,
-    `     thresholds .... ${allOk === true ? 'ok' : 'FAILED'}`,
-    '',
-  ].join('\n');
+  const stdout = summary.outOfScale === true
+    ? [
+      '',
+      `  ── ${LABEL}`,
+      `     out of scale .. no document within ${TIMEOUT}, stopped after the first render`,
+      '',
+    ].join('\n')
+    : [
+      '',
+      `  ── ${LABEL}`,
+      `     documents ..... ${requests.count} of ${RENDERS * VUS} asked (${fixed(requests.rate)} RPS)`,
+      `     latency med ... ${fixed(latency.med)} ms`,
+      `     latency p95 ... ${fixed(latency.p95)} ms`,
+      `     failures ...... ${fixed((failed.rate ?? 0) * 100)} %`,
+      `     thresholds .... ${allOk === true ? 'ok' : 'FAILED'}`,
+      '',
+    ].join('\n');
 
   const output = { stdout: stdout };
 
