@@ -27,10 +27,10 @@ import { spawnSync } from 'node:child_process';
 import { BIG_PAGES, BIG_RENDERS, buildMatrix, buildPayload, buildProfiles, discoverSamples, looksValid, PROFILES, readData, RENDER_TIMEOUT, ROOT_DIR } from './matrix.mjs';
 import { generateReport } from './report.mjs';
 
-const PREVIEWS_DIR = path.join(ROOT_DIR, 'docs', 'previews');
+const PREVIEWS_DIR = path.join(ROOT_DIR, 'public', 'previews');
 
 const DEFAULTS = {
-  image     : 'carbone/carbone-ee:full-5.14.0',
+  image     : 'carbone/carbone-ee:full-5.15.0',
   container : 'carbone-bench',
   port      : 4000,
   cpus      : '1,4',

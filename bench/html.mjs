@@ -11,7 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseSampleIdentity } from './matrix.mjs';
 
-const DOCS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'docs');
+const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
 const ENGINE = {
   merge : { id: 'merge', label: 'Merge only', short: 'Merge only', color: '#A644C5' },
@@ -551,7 +551,7 @@ function previewSrc (templateFile) {
   const base = path.basename(templateFile);
 
   for (const name of [`${base}.jpg`, `${base}.jpeg`, `${base}.png`]) {
-    const abs = path.join(DOCS_DIR, 'previews', name);
+    const abs = path.join(PUBLIC_DIR, 'previews', name);
 
     if (fs.existsSync(abs) === true) {
       return { href: `previews/${name}`, abs };
@@ -1086,7 +1086,7 @@ export function renderHtml ({ model, archive, currentId }) {
 `;
 }
 
-export function summaryMarkdown (model, { pageHref = 'docs/index.html', archiveHref = 'docs/index.html#history' } = {}) {
+export function summaryMarkdown (model, { pageHref = 'public/index.html', archiveHref = 'public/index.html#history' } = {}) {
   if (model.templates.length === 0) {
     return `_No measured run in the latest campaign — execute \`npm run bench\`._`;
   }

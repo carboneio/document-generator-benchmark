@@ -39,7 +39,7 @@ Usage: node bench/grow-sample.mjs <sample.json> <pages> <array> [options]
 
 Carbone must be running: the page count of a document can only be known by
 generating it. Start one with:
-  docker run --rm -p 4000:4000 carbone/carbone-ee:full-5.14.0 webserver -s -f 4
+  docker run --rm -p 4000:4000 carbone/carbone-ee:full-5.15.0 webserver -s -f 4
 `;
 
 const log = (message = '') => process.stdout.write(`${message}\n`);
@@ -365,7 +365,7 @@ async function post (port, urlPath, payload, timeoutMs) {
     }
 
     throw new Error(`Carbone is not answering on port ${port} (${error.message}). Start one with:\n`
-      + `  docker run --rm -p ${port}:4000 carbone/carbone-ee:full-5.14.0 webserver -s -f 4`);
+      + `  docker run --rm -p ${port}:4000 carbone/carbone-ee:full-5.15.0 webserver -s -f 4`);
   });
 
   if (status !== 200) {

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
  * Turns the JSON results written by `bench/run.mjs` into:
- *   - docs/<stamp>.html      dated public report (committed)
- *   - docs/index.html        copy of the latest report
- *   - docs/archive.json      history of previous reports
+ *   - public/<stamp>.html    dated public report (committed)
+ *   - public/index.html      copy of the latest report
+ *   - public/archive.json    history of previous reports
  *   - RESULT.md              raw metrics of the latest campaign
  *   - results/results.csv    same data, machine readable
  *   - README.md              short summary + link to the HTML page
@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { ROOT_DIR } from './matrix.mjs';
 import { buildModel, campaignStamp, filterCampaign, renderHtml, summaryMarkdown, toRows } from './html.mjs';
 
-const DOCS_DIR = path.join(ROOT_DIR, 'docs');
+const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 const MARKER_START = '<!-- BENCHMARK:RESULTS:START -->';
 const MARKER_END = '<!-- BENCHMARK:RESULTS:END -->';
 const LEGACY_START = '<!-- BENCHMARK:TABLE:START -->';
@@ -188,8 +188,8 @@ function updateReadme (readmePath, model) {
 
   const readme = fs.readFileSync(readmePath, 'utf8');
   const content = summaryMarkdown(model, {
-    pageHref    : 'docs/index.html',
-    archiveHref : 'docs/index.html#history',
+    pageHref    : 'public/index.html',
+    archiveHref : 'public/index.html#history',
   });
 
   const updated = replaceMarker(readme, MARKER_START, MARKER_END, content)
@@ -205,7 +205,7 @@ function updateReadme (readmePath, model) {
 }
 
 function readArchive () {
-  const archivePath = path.join(DOCS_DIR, 'archive.json');
+  const archivePath = path.join(PUBLIC_DIR, 'archive.json');
 
   if (fs.existsSync(archivePath) === false) {
     return [];
@@ -219,7 +219,7 @@ function readArchive () {
 }
 
 function writeArchive (archive) {
-  fs.writeFileSync(path.join(DOCS_DIR, 'archive.json'), `${JSON.stringify(archive, null, 2)}\n`);
+  fs.writeFileSync(path.join(PUBLIC_DIR, 'archive.json'), `${JSON.stringify(archive, null, 2)}\n`);
 }
 
 function removeLegacyCharts () {
@@ -233,7 +233,7 @@ function removeLegacyCharts () {
 }
 
 function writeHtmlCampaign (model) {
-  fs.mkdirSync(DOCS_DIR, { recursive: true });
+  fs.mkdirSync(PUBLIC_DIR, { recursive: true });
 
   const currentId = campaignStamp(model.meta);
   const filename = `${currentId}.html`;
@@ -250,8 +250,8 @@ function writeHtmlCampaign (model) {
 
   const html = renderHtml({ model, archive, currentId });
 
-  fs.writeFileSync(path.join(DOCS_DIR, filename), html);
-  fs.writeFileSync(path.join(DOCS_DIR, 'index.html'), html);
+  fs.writeFileSync(path.join(PUBLIC_DIR, filename), html);
+  fs.writeFileSync(path.join(PUBLIC_DIR, 'index.html'), html);
   writeArchive(archive);
 
   return { filename, archive };
@@ -280,9 +280,9 @@ export function generateReport ({ resultsDir = path.join(ROOT_DIR, 'results') } 
   process.stdout.write([
     '',
     'Report generated:',
-    `  - docs/${filename}`,
-    '  - docs/index.html',
-    '  - docs/archive.json',
+    `  - public/${filename}`,
+    '  - public/index.html',
+    '  - public/archive.json',
     `  - ${path.relative(ROOT_DIR, resultMdPath)}`,
     `  - ${path.relative(ROOT_DIR, csvPath)}`,
     readmeUpdated === true ? '  - README.md (summary + link)' : '  - README.md skipped (BENCHMARK markers not found)',
