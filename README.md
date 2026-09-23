@@ -25,8 +25,8 @@ Latest report: **[2026-09-22 13:51:36 UTC](public/index.html)** · [previous ben
 
 | Template sample | Merge only (Documents / min) | Convert to PDF (Documents / min) | Pages / s |
 | --- | --- | --- | --- |
-| [`financial_chart`](public/index.html#financial-chart-docx) | DOCX → DOCX **10,619** | **7,959** · DOCX → PDF (fastest: Carbone ICE) | **26** on 1 page (Carbone ICE) |
 | [`invoice_simple`](public/index.html#invoice-simple-docx) | DOCX → DOCX **17,871** | **13,856** · DOCX → PDF (fastest: Carbone ICE) | **141** on 234 pages (Carbone ICE) |
+| [`financial_chart`](public/index.html#financial-chart-docx) | DOCX → DOCX **10,619** | **7,959** · DOCX → PDF (fastest: Carbone ICE) | **26** on 1 page (Carbone ICE) |
 | [`ticket_qrcode`](public/index.html#ticket-qrcode-docx) | DOCX → DOCX **6,053** | **5,628** · DOCX → PDF (fastest: Carbone ICE) | **217** on 200 pages (Carbone ICE) |
 | [`invoice_simple`](public/index.html#invoice-simple-html) | HTML → HTML **63,102** | **21,804** · HTML → PDF (fastest: Chromium) | **80** on 234 pages (Chromium) |
 

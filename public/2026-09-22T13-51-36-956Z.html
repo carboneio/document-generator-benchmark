@@ -267,37 +267,7 @@ footer { color: var(--muted); font-size: 12px; padding: 0 0 40px; }
     </div>
   </header>
   <main class="wrap">
-    <section class="card" id="financial-chart-docx">
-    <header class="card-head">
-      <div class="card-title">
-        <h2 class="template-name">financial_chart</h2>
-        <p class="template-meta"><span class="badge">DOCX</span></p>
-      </div>
-      <a class="card-ask" href="https://carbone.io/?chat=open" target="_blank" rel="noopener">Need it faster? Let’s talk</a>
-    </header>
-    <div class="card-body">
-      <figure class="preview">
-    <img src="previews/template_chart.docx.jpg" alt="financial_chart template preview" width="1124" height="795"/>
-  </figure>
-      <div class="card-data"><table class="grid">
-      <colgroup><col class="pipe"/><col/><col/><col/></colgroup>
-      <thead><tr>
-        <th></th>
-        <th><span class="unit">Documents / min</span>
-        <div class="muted hint" data-hint="A VU is a virtual user, sending one request after the other. One request in flight on 1 CPU: one document at a time, nothing waiting in a queue.">1 CPU · 1 VU</div></th><th><span class="unit">Documents / min</span>
-        <div class="muted hint" data-hint="A VU is a virtual user, sending one request after the other. 5 requests in flight on 4 CPU: the figures include the wait in the queue.">4 CPU · 5 VU</div></th>
-        <th><span class="unit">Pages / s</span>
-        <div class="muted hint" data-hint="Page generation speed for this document, processed alone on a single CPU.">on 1 page</div></th>
-      </tr></thead>
-      <tbody><tr class="apart"><td class="pipe group">DOCX → DOCX<div class="muted">merge only</div></td><td><strong><span data-num="5788.209417416722" data-digits="0">5,788</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this. Lower is better."><span data-num="12.17915" data-digits="0">12</span> ms</div></td><td><strong><span data-num="10619.333700526295" data-digits="0">10,619</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this. Lower is better."><span data-num="39.7063" data-digits="0">40</span> ms</div></td><td><strong><span data-num="105.7921184871727" data-digits="0">106</span></strong></td></tr></tbody><tbody>
-        <tr class="group-head"><th colspan="4">DOCX → PDF</th></tr>
-        <tr><td class="pipe"><span class="dot" style="background:#A644C5"></span>Carbone ICE</td><td class="bar" style="--c:#A644C540;--w:100.0%"><strong><span data-num="1517.147560300294" data-digits="0">1,517</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this. Lower is better."><span data-num="49.02479999999999" data-digits="0">49</span> ms</div></td><td class="bar" style="--c:#A644C540;--w:100.0%"><strong><span data-num="7959.493606404102" data-digits="0">7,959</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this. Lower is better."><span data-num="55.77205" data-digits="0">56</span> ms</div></td><td class="bar" style="--c:#A644C540;--w:100.0%"><strong><span data-num="26.394277720590175" data-digits="0">26</span></strong></td></tr><tr><td class="pipe"><span class="dot" style="background:#ff7f0e"></span>LibreOffice</td><td class="bar" style="--c:#ff7f0e40;--w:32.4%"><strong><span data-num="491.8919805210775" data-digits="0">492</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this. Lower is better."><span data-num="152.55485" data-digits="0">153</span> ms</div></td><td class="bar" style="--c:#ff7f0e40;--w:26.0%"><strong><span data-num="2070.1844989829183" data-digits="0">2,070</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this. Lower is better."><span data-num="196.8849" data-digits="0">197</span> ms</div></td><td class="bar" style="--c:#ff7f0e40;--w:33.2%"><strong><span data-num="8.767776667192733" data-digits="0">9</span></strong></td></tr><tr><td class="pipe"><span class="dot" style="background:#2ca02c"></span>OnlyOffice</td><td class="bar" style="--c:#2ca02c40;--w:7.5%"><strong><span data-num="113.34726371204356" data-digits="0">113</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this. Lower is better."><span data-num="562.3345499999999" data-digits="0">562</span> ms</div></td><td class="bar" style="--c:#2ca02c40;--w:5.7%"><strong><span data-num="450.1304319411897" data-digits="0">450</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this. Lower is better."><span data-num="952.1672000000001" data-digits="0">952</span> ms</div></td><td class="bar" style="--c:#2ca02c40;--w:7.2%"><strong><span data-num="1.8984752396113065" data-digits="0">2</span></strong></td></tr>
-      </tbody>
-    </table>
-    </div>
-    </div>
-  </section>
-<section class="card" id="invoice-simple-docx">
+    <section class="card" id="invoice-simple-docx">
     <header class="card-head">
       <div class="card-title">
         <h2 class="template-name">invoice_simple</h2>
@@ -322,6 +292,36 @@ footer { color: var(--muted); font-size: 12px; padding: 0 0 40px; }
       <tbody><tr class="apart"><td class="pipe group">DOCX → DOCX<div class="muted">merge only</div></td><td><strong><span data-num="10301.667153134282" data-digits="0">10,302</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this. Lower is better."><span data-num="7.52915" data-digits="1">7.5</span> ms</div></td><td><strong><span data-num="17871.109980597932" data-digits="0">17,871</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this. Lower is better."><span data-num="23.931499999999996" data-digits="0">24</span> ms</div></td><td><strong><span data-num="1059.20215823756" data-digits="0">1,059</span></strong></td></tr></tbody><tbody>
         <tr class="group-head"><th colspan="4">DOCX → PDF</th></tr>
         <tr><td class="pipe"><span class="dot" style="background:#A644C5"></span>Carbone ICE</td><td class="bar" style="--c:#A644C540;--w:100.0%"><strong><span data-num="2842.4433643159664" data-digits="0">2,842</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this. Lower is better."><span data-num="24.465" data-digits="0">24</span> ms</div></td><td class="bar" style="--c:#A644C540;--w:100.0%"><strong><span data-num="13856.000133017602" data-digits="0">13,856</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this. Lower is better."><span data-num="28.5528" data-digits="0">29</span> ms</div></td><td class="bar" style="--c:#A644C540;--w:100.0%"><strong><span data-num="140.88899753263627" data-digits="0">141</span></strong></td></tr><tr><td class="pipe"><span class="dot" style="background:#ff7f0e"></span>LibreOffice</td><td class="bar" style="--c:#ff7f0e40;--w:40.2%"><strong><span data-num="1143.5498073118574" data-digits="0">1,144</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this. Lower is better."><span data-num="59.512299999999996" data-digits="0">60</span> ms</div></td><td class="bar" style="--c:#ff7f0e40;--w:41.8%"><strong><span data-num="5795.6533758811565" data-digits="0">5,796</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this. Lower is better."><span data-num="63.0639" data-digits="0">63</span> ms</div></td><td class="bar" style="--c:#ff7f0e40;--w:3.7%"><strong><span data-num="5.2050202999128246" data-digits="0">5</span></strong></td></tr><tr><td class="pipe"><span class="dot" style="background:#2ca02c"></span>OnlyOffice</td><td class="bar" style="--c:#2ca02c40;--w:8.6%"><strong><span data-num="244.76199139987952" data-digits="0">245</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this. Lower is better."><span data-num="249.3572" data-digits="0">249</span> ms</div></td><td class="bar" style="--c:#2ca02c40;--w:6.7%"><strong><span data-num="933.6906588233333" data-digits="0">934</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this. Lower is better."><span data-num="433.91335" data-digits="0">434</span> ms</div></td><td class="bar" style="--c:#2ca02c40;--w:18.7%"><strong><span data-num="26.280426753699054" data-digits="0">26</span></strong></td></tr>
+      </tbody>
+    </table>
+    </div>
+    </div>
+  </section>
+<section class="card" id="financial-chart-docx">
+    <header class="card-head">
+      <div class="card-title">
+        <h2 class="template-name">financial_chart</h2>
+        <p class="template-meta"><span class="badge">DOCX</span></p>
+      </div>
+      <a class="card-ask" href="https://carbone.io/?chat=open" target="_blank" rel="noopener">Need it faster? Let’s talk</a>
+    </header>
+    <div class="card-body">
+      <figure class="preview">
+    <img src="previews/template_chart.docx.jpg" alt="financial_chart template preview" width="1124" height="795"/>
+  </figure>
+      <div class="card-data"><table class="grid">
+      <colgroup><col class="pipe"/><col/><col/><col/></colgroup>
+      <thead><tr>
+        <th></th>
+        <th><span class="unit">Documents / min</span>
+        <div class="muted hint" data-hint="A VU is a virtual user, sending one request after the other. One request in flight on 1 CPU: one document at a time, nothing waiting in a queue.">1 CPU · 1 VU</div></th><th><span class="unit">Documents / min</span>
+        <div class="muted hint" data-hint="A VU is a virtual user, sending one request after the other. 5 requests in flight on 4 CPU: the figures include the wait in the queue.">4 CPU · 5 VU</div></th>
+        <th><span class="unit">Pages / s</span>
+        <div class="muted hint" data-hint="Page generation speed for this document, processed alone on a single CPU.">on 1 page</div></th>
+      </tr></thead>
+      <tbody><tr class="apart"><td class="pipe group">DOCX → DOCX<div class="muted">merge only</div></td><td><strong><span data-num="5788.209417416722" data-digits="0">5,788</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this. Lower is better."><span data-num="12.17915" data-digits="0">12</span> ms</div></td><td><strong><span data-num="10619.333700526295" data-digits="0">10,619</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this. Lower is better."><span data-num="39.7063" data-digits="0">40</span> ms</div></td><td><strong><span data-num="105.7921184871727" data-digits="0">106</span></strong></td></tr></tbody><tbody>
+        <tr class="group-head"><th colspan="4">DOCX → PDF</th></tr>
+        <tr><td class="pipe"><span class="dot" style="background:#A644C5"></span>Carbone ICE</td><td class="bar" style="--c:#A644C540;--w:100.0%"><strong><span data-num="1517.147560300294" data-digits="0">1,517</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this. Lower is better."><span data-num="49.02479999999999" data-digits="0">49</span> ms</div></td><td class="bar" style="--c:#A644C540;--w:100.0%"><strong><span data-num="7959.493606404102" data-digits="0">7,959</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this. Lower is better."><span data-num="55.77205" data-digits="0">56</span> ms</div></td><td class="bar" style="--c:#A644C540;--w:100.0%"><strong><span data-num="26.394277720590175" data-digits="0">26</span></strong></td></tr><tr><td class="pipe"><span class="dot" style="background:#ff7f0e"></span>LibreOffice</td><td class="bar" style="--c:#ff7f0e40;--w:32.4%"><strong><span data-num="491.8919805210775" data-digits="0">492</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this. Lower is better."><span data-num="152.55485" data-digits="0">153</span> ms</div></td><td class="bar" style="--c:#ff7f0e40;--w:26.0%"><strong><span data-num="2070.1844989829183" data-digits="0">2,070</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this. Lower is better."><span data-num="196.8849" data-digits="0">197</span> ms</div></td><td class="bar" style="--c:#ff7f0e40;--w:33.2%"><strong><span data-num="8.767776667192733" data-digits="0">9</span></strong></td></tr><tr><td class="pipe"><span class="dot" style="background:#2ca02c"></span>OnlyOffice</td><td class="bar" style="--c:#2ca02c40;--w:7.5%"><strong><span data-num="113.34726371204356" data-digits="0">113</span></strong><div class="muted hint" data-hint="Document latency (p95): 95% of documents were delivered faster than this. Lower is better."><span data-num="562.3345499999999" data-digits="0">562</span> ms</div></td><td class="bar" style="--c:#2ca02c40;--w:5.7%"><strong><span data-num="450.1304319411897" data-digits="0">450</span></strong><div class="muted hint" data-hint="Document latency (p95), including queue wait time, with one more virtual user than the number of CPUs. 95% of documents were delivered faster than this. Lower is better."><span data-num="952.1672000000001" data-digits="0">952</span> ms</div></td><td class="bar" style="--c:#2ca02c40;--w:7.2%"><strong><span data-num="1.8984752396113065" data-digits="0">2</span></strong></td></tr>
       </tbody>
     </table>
     </div>

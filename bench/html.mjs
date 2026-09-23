@@ -279,6 +279,12 @@ export function buildModel (rows, meta) {
   const templates = groupBy(rows, (row) => `${row.vendor}|${row.family}|${row.template}`)
     .map(buildCard)
     .sort((a, b) => {
+      // invoice_simple DOCX first; its HTML card sorts with the rest
+      const rank = (card) => (card.family === 'invoice_simple' && String(card.ext).toLowerCase() === 'docx' ? 0 : 1);
+
+      if (rank(a) !== rank(b)) {
+        return rank(a) - rank(b);
+      }
       if (a.ext !== b.ext) {
         return a.ext.localeCompare(b.ext);
       }
