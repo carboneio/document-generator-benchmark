@@ -16,6 +16,8 @@ Default image: `carbone/carbone-ee:full-5.15.0` (Carbone ICE requires **5.14.0**
 
 ## 🎯 Results
 
+> 👉 **Full report: [carboneio.github.io/document-generator-benchmark](https://carboneio.github.io/document-generator-benchmark/)**
+
 - **`Documents / min`** at `1 CPU · 1 VU`, then at `4 CPU · 5 VU` (includes queue wait time)
 - **`Pages / s`** for one large document, alone on one CPU
 - A **VU** (*virtual user*) sends one request, waits for the answer, then sends the next one
