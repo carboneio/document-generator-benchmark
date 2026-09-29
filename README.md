@@ -6,11 +6,11 @@
 [![Benchmark](https://img.shields.io/badge/benchmark-k6-orange.svg)](https://k6.io)
 [![Carbone](https://img.shields.io/badge/carbone-5.15.0-A644C5.svg)](https://carbone.io)
 
-This repository measures the speed of the [**Carbone**](https://carbone.io) HTTP API (Docker) on real document jobs.
+This repository benchmarks the [**Carbone**](https://carbone.io) HTTP API on real document jobs.
 
 Default image: `carbone/carbone-ee:full-5.15.0` (Carbone ICE requires **5.14.0** or later).
 
-> Some samples need **Carbone Enterprise** and a license — [get a free trial with every feature](https://carbone.io/documentation/developer/on-premise-installation/licensing.html#get-a-license).
+> Some samples require **Carbone Enterprise**. [Get a free trial with every feature](https://carbone.io/documentation/developer/on-premise-installation/licensing.html#get-a-license).
 
 
 ## 🎯 Results
@@ -40,9 +40,9 @@ Raw k6 metrics of the latest campaign: [RESULT.md](RESULT.md).
 
 ### Prerequisites
 
-- [Docker](https://www.docker.com/get-started) — runs the Carbone server
-- [k6](https://k6.io) — generates the load
-- [Node.js](https://nodejs.org) ≥ 18 — orchestrates the runs and builds the report (no npm dependency to install)
+- [Docker](https://www.docker.com/get-started) to run Carbone
+- [k6](https://k6.io) to generate load
+- [Node.js](https://nodejs.org) 18 or later to run the benchmark and build the report
 
 ```bash
 # macOS
@@ -65,27 +65,27 @@ export CARBONE_LICENSE=$(cat my_license.carbone-license)
 npm run bench
 ```
 
-The runner does everything. It starts `carbone/carbone-ee:full-5.15.0` with `-f 1` and plays every sample one document at a time. Then it restarts the container with `-f 4` and plays them again with 5 virtual users. Finally it removes the container and writes the HTML report (under `public/`), `RESULT.md`, and the CSV.
+The runner starts Carbone with one factory for the `solo` profile, then restarts it with four factories for the `load` profile. It removes the container when done and writes the HTML, Markdown and CSV reports.
 
-The container runs the same command as the [manual one](#-running-carbone-by-hand), only detached and named: `docker run -d --name carbone-bench -p 4000:4000 <image> webserver -s -f <n>`. Extra flags are opt-in (`--env`, `--shm-size`, `--docker-cpus`). The exact command is printed before each start.
-
-### Or start Carbone yourself
-
-To control the container yourself — custom flags, remote server, debugging — start it and point the runner at it with `--no-docker`. One factory count per server, since the runner cannot restart it:
+The default campaign takes about **30 minutes**. Validate your setup first with the shorter run:
 
 ```bash
-docker run -t -i --rm -p 4000:4000 carbone/carbone-ee:full-5.15.0 webserver -s -f 4
+npm run bench:quick
+npm run report       # rebuild reports from existing results
+```
+
+The container runs in the background as `carbone-bench`. The exact `docker run` command is printed before each start. Optional Docker settings include `--env`, `--shm-size` and `--docker-cpus`.
+
+### Use an existing Carbone server
+
+For a remote server, custom container or debugging session, start Carbone yourself and pass `--no-docker`:
+
+```bash
+docker run -t -i --rm -p 4000:4000 -e CARBONE_LICENSE carbone/carbone-ee:full-5.15.0 webserver -s -f 4
 node bench/run.mjs --no-docker --cpus 4
 ```
 
-Both modes write to the same `results/` folder. You can run `--cpus 1` and `--cpus 4` in two passes and still get one complete report. Add `--no-solo` to the second pass: timing a single document twice measures the same thing.
-
-Expect roughly **30 minutes** with the default settings: 35 runs, plus warmups and container restarts.
-
-```bash
-npm run bench:quick          # same matrix, a handful of documents per run, to validate the setup first
-npm run report               # rebuild public/index.html, the dated snapshot, RESULT.md and CSV
-```
+The runner cannot restart a server it does not manage, so use one factory count per pass. Results accumulate in `results/`; running `--cpus 1` and `--cpus 4 --no-solo` separately still produces one complete report.
 
 ### Options
 
@@ -106,7 +106,7 @@ Every option is a CLI flag, or the matching `CARBONE_*` environment variable.
 | `--docker-cpus <n>` | `CARBONE_DOCKER_CPUS` | – | Also cap the container to `n` host CPUs |
 | `--license-file <f>` | `CARBONE_LICENSE_FILE` | – | Mount an enterprise license file into the container |
 | `--env KEY=VALUE` | – | – | Extra environment variable for the container (repeatable) |
-| `--shm-size <size>` | `CARBONE_SHM_SIZE` | – | `/dev/shm` size, e.g. `1g` — Chromium and LibreOffice like it |
+| `--shm-size <size>` | `CARBONE_SHM_SIZE` | – | `/dev/shm` size, e.g. `1g` (useful for Chromium and LibreOffice) |
 | `--startup-timeout <s>` | `CARBONE_STARTUP_TIMEOUT` | `120` | How long to wait for Carbone to listen |
 | `--request-timeout <s>` | `CARBONE_REQUEST_TIMEOUT` | `60` | Give up on a warmup render after n seconds |
 | `--warmup <n>` | `CARBONE_WARMUP` | `3` | Valid renders required before measuring; ignored on documents over 100 pages |
@@ -133,7 +133,7 @@ node bench/run.mjs --vus 4 --renders 30
 
 ### Enterprise license
 
-Carbone Enterprise needs a license for some samples in the benchmarks (qrcode, image). [Get a free trial with every feature](https://carbone.io/documentation/developer/on-premise-installation/licensing.html#get-a-license).
+Samples that use QR codes or images require a Carbone Enterprise license. [Get a free trial with every feature](https://carbone.io/documentation/developer/on-premise-installation/licensing.html#get-a-license).
 
 The runner forwards the license to the container by itself. Use whichever form you already have:
 
@@ -154,21 +154,21 @@ node bench/run.mjs --license-file ./my_license.carbone-license
 
 ## 🧪 Running Carbone by hand
 
-Useful to check a configuration before launching the whole benchmark.
+Export `CARBONE_LICENSE` as shown above, then use these commands to check a configuration before running the full benchmark.
 
 ### 1. Start Carbone
 
 ```bash
 # 1 worker
-docker run -t -i --rm -p 4000:4000 carbone/carbone-ee:full-5.15.0 webserver -s -f 1
+docker run -t -i --rm -p 4000:4000 -e CARBONE_LICENSE carbone/carbone-ee:full-5.15.0 webserver -s -f 1
 
 # 4 workers
-docker run -t -i --rm -p 4000:4000 carbone/carbone-ee:full-5.15.0 webserver -s -f 4
+docker run -t -i --rm -p 4000:4000 -e CARBONE_LICENSE carbone/carbone-ee:full-5.15.0 webserver -s -f 4
 ```
 
 ### 2. Upload a template
 
-Like the benchmark does: the template is stored once, then every document is generated from its `templateVersionId`.
+The template is stored once. Every document is then generated from its `templateVersionId`.
 
 ```bash
 cd samples
@@ -204,6 +204,8 @@ curl -s -H 'Content-Type: application/json' \
 `bench/carbone-bench.js` reads a ready-made request body, so it can be replayed on its own:
 
 ```bash
+printf '{"data":%s}\n' "$(cat template_invoice_simple.json)" > payload.json
+
 CARBONE_URL="http://localhost:4000/render/${id}?download=true" \
 CARBONE_PAYLOAD=./payload.json CARBONE_VUS=5 CARBONE_RENDERS=100 \
 CARBONE_MAX_DURATION=60s CARBONE_TIMEOUT=120s k6 run bench/carbone-bench.js
@@ -225,10 +227,10 @@ CARBONE_MAX_DURATION=60s CARBONE_TIMEOUT=120s k6 run bench/carbone-bench.js
 ### Benchmark flow
 
 1. Samples are auto-discovered in `samples/`.
-2. Each template is uploaded once with `POST /template`.
-3. Every regular pipeline is warmed up with 3 valid documents. Startup connection resets are retried.
-4. k6 measures `POST /render/:templateVersionId?download=true`. Requests contain only the JSON dataset; template upload and payload preparation are excluded.
-5. The runner validates the output (`%PDF` or `PK`) and generates the JSON, CSV, Markdown and HTML reports.
+2. After each Carbone start, every template is uploaded once with `POST /template`.
+3. Each regular conversion path produces 3 valid warmup documents. Startup connection resets are retried.
+4. k6 measures `POST /render/:templateVersionId?download=true`. Requests contain only the JSON dataset, so template upload and payload preparation are excluded.
+5. The runner writes the JSON, CSV, Markdown and HTML reports.
 
 Carbone always merges the data into the template. PDF conversion is an optional extra step:
 
@@ -247,7 +249,7 @@ A **pipeline** is one template, one dataset, one output format and one converter
 | `solo` | 1 | 1 | 10 documents | the `1 CPU · 1 VU` column, and every `Pages / s` |
 | `load` | 4 | 5 | 100 documents per user, 60s max | the `4 CPU · 5 VU` column |
 
-Five VUs keep four factories busy with at most one queued request. Runs stop after a **fixed amount of work**, so every engine processes the same number of documents; `maxDuration` is only a safety net.
+Five VUs keep four factories busy with at most one queued request. Runs stop after a **fixed amount of work**, so every engine processes the same number of documents. `maxDuration` is only a safety net.
 
 ```bash
 npm run plan # print the complete matrix without running it
@@ -284,28 +286,28 @@ Carbone must be running. The script grows the chosen array, randomizes copied va
 
 ### Measurement rules
 
-- **Metrics:** documents/min, p95 latency and pages/s; the CSV also contains median, average, p90, p99 and failure rate.
+- **Metrics:** documents/min, p95 latency and pages/s. The CSV also contains median, average, p90, p99 and failure rate.
 - **Timeout:** a render abandoned after 120s stops the run and is reported as `∞`.
-- **Thresholds:** `http_req_failed < 1%` and `p(95) < 10s`; results are kept if a threshold is crossed.
+- **Thresholds:** `http_req_failed < 1%` and `p(95) < 10s`. Results are kept if a threshold is crossed.
 - **Efficiency:** k6 drops response bodies during measured runs to keep the load generator cheap.
 
 The exact environment (host CPU, Docker and k6 versions, image, date) is recorded in `results/index.json` and printed in [RESULT.md](RESULT.md).
 
-> ⚠️ This benchmark measures one Carbone container on one machine. Absolute numbers depend on your hardware. The report compares **converters on the same template**. 1 vs 4 CPU shows scaling, not a ranking. A later phase can add competing products as extra engines in the same table (`vendor` is already on every run).
+> ⚠️ This benchmark measures one Carbone container on one machine. Absolute numbers depend on the hardware. The report compares **converters on the same template**. Comparing 1 and 4 CPUs shows scaling, not a product ranking.
 
 ## 🛠️ Troubleshooting
 
 - **Carbone ICE rows reported as “not available”**: Carbone ICE needs **5.14.0+** (DOCX → PDF only). Default image is `carbone/carbone-ee:full-5.15.0`.
-- **OnlyOffice rows reported as “not available”**: the converter is disabled in the image you used. Point Carbone to the binaries with `CARBONE_ONLY_OFFICE_PATH` (`"x2tPath, AllFontsPath, fontPath"`), or use an image that bundles it.
-- **Chromium rows reported as “not available”**: same idea with `CARBONE_CHROME_PATH`.
-- **Container exits during startup**: the runner stops at once and prints the container logs. Usually an invalid or expired license, or a port already in use.
+- **OnlyOffice rows reported as “not available”**: the converter is disabled in the selected image. Set `CARBONE_ONLY_OFFICE_PATH` (`"x2tPath, AllFontsPath, fontPath"`) or use an image that bundles it.
+- **Chromium rows reported as “not available”**: set `CARBONE_CHROME_PATH` or use an image that bundles Chromium.
+- **Container exits during startup**: the runner prints the container logs. Common causes are an invalid license or a port already in use.
 
 ## 🤝 Contributing
 
-Contributions are welcome: add samples, refine the methodology, improve the report. Feel free to open an issue or a pull request.
+Contributions are welcome. Add samples, refine the methodology or improve the report through an issue or pull request.
 
 ## 📄 License
 
-Apache License 2.0 — see [LICENSE](LICENSE).
+Apache License 2.0. See [LICENSE](LICENSE).
 
 **Made with ❤️ for the open-source community**
