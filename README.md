@@ -37,85 +37,6 @@ Throughputs at **4 CPU · 5 VU**. Pages per second on one document alone, at **1
 
 Raw k6 metrics of the latest campaign: [RESULT.md](RESULT.md).
 
----
-
-## 🔬 What is measured
-
-Each sample is a **template + JSON data** pair. Carbone always merges the data into the template. PDF conversion is an optional extra step, done by a dedicated engine:
-
-| Pipeline | `convertTo` | `converter` | Engine |
-| -------- | ----------- | ----------- | ------ |
-| Merge only (DOCX → DOCX, HTML → HTML) | – | – | Carbone template engine only |
-| DOCX → PDF | `pdf` | `I` | Carbone ICE (Instant Converter Engine, since 5.14.0) |
-| Office template → PDF | `pdf` | `L` | LibreOffice |
-| Office template → PDF | `pdf` | `O` | OnlyOffice |
-| Web template → PDF | `pdf` | `C` | Chromium |
-
-A **pipeline** is one sample, one dataset, one output format, and one converter. Each pipeline runs under two **profiles**. Carbone starts once per profile:
-
-| Profile | Factories (CPU) | Virtual users (VU) | Work | Reported as |
-| ------- | --------------- | ------------------ | ---- | ----------- |
-| `solo` | 1 | 1 | 10 documents | the `1 CPU · 1 VU` column, and every `Pages / s` |
-| `load` | 4 | 5 | 100 documents per user, 60s max | the `4 CPU · 5 VU` column |
-
-Five virtual users on four CPUs: one more request than the server can handle at once. Enough to keep every factory busy, without turning the measure into a queue-length test.
-
-Pipelines come from auto-discovered samples in `samples/`, plus the converters that fit each format. DOCX gets LibreOffice, OnlyOffice, **and** Carbone ICE. Other office templates get LibreOffice and OnlyOffice. Web templates get Chromium.
-
-Every run stops on a **fixed amount of work**, never on a clock. A slow engine is measured on the same number of documents as a fast one. `maxDuration` is only a safety net.
-
-A document of more than **100 pages** is measured one at a time, **3 times**, without warmup. A render abandoned after **120s** is reported as `∞` instead of a duration.
-
-With the samples committed here, that is around **35 runs**. Print the plan without running anything:
-
-```bash
-npm run plan
-```
-
-### Samples
-
-| Template | Data | Card on the report | Formats benchmarked |
-| -------- | ---- | ------------------ | ------------------- |
-| `template_invoice_simple.docx` | `template_invoice_simple.json` + `_234p.json` | `invoice_simple` DOCX | merge only, PDF (LibreOffice, OnlyOffice, Carbone ICE) |
-| `template_invoice_simple.html` | the same two datasets | `invoice_simple` HTML | merge only, PDF (Chromium) |
-| `template_chart.docx` | `template_chart.json` | `financial_chart` | merge only, PDF (LibreOffice, OnlyOffice, Carbone ICE) |
-| `template_qrcode.docx` | `template_qrcode.json` | `ticket_qrcode` | merge only, PDF (LibreOffice, OnlyOffice, Carbone ICE) |
-
-A card is named after what the document is, not after its file. `template_chart.docx` is a financial report; `template_qrcode.docx` is an event ticket.
-
-Adding a sample needs **no code change**. Drop `my_template.docx` and `my_template.json` into `samples/`; they are picked up on the next run. A template without a matching `.json` is rendered with an empty dataset.
-
-### Large documents and pages per second
-
-A template can carry a **second dataset**. Its name ends with the number of pages the document has:
-
-```
-template_invoice_simple.docx  +  template_invoice_simple.json        →     1 page
-                                 template_invoice_simple_234p.json   →   234 pages
-```
-
-Both are measured. The large one feeds the **`Pages / s`** column — the unit that compares a small document with a large one. A large document is only measured one at a time: under load, its duration would say more about the queue than about the document.
-
-Writing a 234-page dataset by hand is no fun, so `bench/grow-sample.mjs` does it. Give it a number of **pages** and the array to grow:
-
-```bash
-# at least 200 pages of invoice, growing d.products
-node bench/grow-sample.mjs samples/template_invoice_simple.json 200 d.products
-
-# the dataset is the array itself in this sample: grow `d`
-node bench/grow-sample.mjs samples/template_qrcode.json 200 d
-```
-
-It starts with as many entries as pages asked. It renders the PDF with Carbone, counts its pages, then raises the entry count until it passes the target.
-
-The file is named after the page count obtained.
-
-Added entries are copies of the first one, with random content: same shape, same types, same string lengths. Images become mono-color pictures — a solid PNG weighs a few hundred bytes; the original photo about 30 KB.
-
-The PDF stays in `.tmp/`, so you can check it. **Carbone must be running**: the page count is only known once the document is generated. Pages are counted on the DOCX with Carbone ICE. Use `--template` when several templates share the dataset, `--converter L` for another engine, `--port` for another server.
-
----
-
 ## 🚀 Getting started
 
 ### Prerequisites
@@ -213,7 +134,7 @@ node bench/run.mjs --vus 4 --renders 30
 
 ### Enterprise license
 
-Carbone Enterprise needs a license, and so do the PDF converters. [Get a free trial with every feature](https://carbone.io/documentation/developer/on-premise-installation/licensing.html#get-a-license).
+Carbone Enterprise needs a license for some samples in the benchmarks (qrcode, image). [Get a free trial with every feature](https://carbone.io/documentation/developer/on-premise-installation/licensing.html#get-a-license).
 
 The runner forwards the license to the container by itself. Use whichever form you already have:
 
@@ -311,6 +232,82 @@ Before measuring, the runner renders each pipeline until it gets 3 **valid** doc
 Carbone sometimes resets the connection on the first render of a kind, while those workers are still starting. Such failures are retried. A run is skipped only when Carbone never produced a valid document; the reason is reported instead of polluting the results.
 
 Each template is uploaded once with `POST /template`, before the measures. A measured request then only carries its JSON dataset. That body is built once by Node and posted as is by k6: no base64 encoding, no JSON serialization, no template upload inside the load generator. The measured time is Carbone's.
+
+
+## 🔬 What is measured
+
+Each sample is a **template + JSON data** pair. Carbone always merges the data into the template. PDF conversion is an optional extra step, done by a dedicated engine:
+
+| Pipeline | `convertTo` | `converter` | Engine |
+| -------- | ----------- | ----------- | ------ |
+| Merge only (DOCX → DOCX, HTML → HTML) | – | – | Carbone template engine only |
+| DOCX → PDF | `pdf` | `I` | Carbone ICE (Instant Converter Engine, since 5.14.0) |
+| Office template → PDF | `pdf` | `L` | LibreOffice |
+| Office template → PDF | `pdf` | `O` | OnlyOffice |
+| Web template → PDF | `pdf` | `C` | Chromium |
+
+A **pipeline** is one sample, one dataset, one output format, and one converter. Each pipeline runs under two **profiles**. Carbone starts once per profile:
+
+| Profile | Factories (CPU) | Virtual users (VU) | Work | Reported as |
+| ------- | --------------- | ------------------ | ---- | ----------- |
+| `solo` | 1 | 1 | 10 documents | the `1 CPU · 1 VU` column, and every `Pages / s` |
+| `load` | 4 | 5 | 100 documents per user, 60s max | the `4 CPU · 5 VU` column |
+
+Five virtual users on four CPUs: one more request than the server can handle at once. Enough to keep every factory busy, without turning the measure into a queue-length test.
+
+Pipelines come from auto-discovered samples in `samples/`, plus the converters that fit each format. DOCX gets LibreOffice, OnlyOffice, **and** Carbone ICE. Other office templates get LibreOffice and OnlyOffice. Web templates get Chromium.
+
+Every run stops on a **fixed amount of work**, never on a clock. A slow engine is measured on the same number of documents as a fast one. `maxDuration` is only a safety net.
+
+A document of more than **100 pages** is measured one at a time, **3 times**, without warmup. A render abandoned after **120s** is reported as `∞` instead of a duration.
+
+With the samples committed here, that is around **35 runs**. Print the plan without running anything:
+
+```bash
+npm run plan
+```
+
+### Samples
+
+| Template | Data | Card on the report | Formats benchmarked |
+| -------- | ---- | ------------------ | ------------------- |
+| `template_invoice_simple.docx` | `template_invoice_simple.json` + `_234p.json` | `invoice_simple` DOCX | merge only, PDF (LibreOffice, OnlyOffice, Carbone ICE) |
+| `template_invoice_simple.html` | the same two datasets | `invoice_simple` HTML | merge only, PDF (Chromium) |
+| `template_chart.docx` | `template_chart.json` | `financial_chart` | merge only, PDF (LibreOffice, OnlyOffice, Carbone ICE) |
+| `template_qrcode.docx` | `template_qrcode.json` | `ticket_qrcode` | merge only, PDF (LibreOffice, OnlyOffice, Carbone ICE) |
+
+A card is named after what the document is, not after its file. `template_chart.docx` is a financial report; `template_qrcode.docx` is an event ticket.
+
+Adding a sample needs **no code change**. Drop `my_template.docx` and `my_template.json` into `samples/`; they are picked up on the next run. A template without a matching `.json` is rendered with an empty dataset.
+
+### Large documents and pages per second
+
+A template can carry a **second dataset**. Its name ends with the number of pages the document has:
+
+```
+template_invoice_simple.docx  +  template_invoice_simple.json        →     1 page
+                                 template_invoice_simple_234p.json   →   234 pages
+```
+
+Both are measured. The large one feeds the **`Pages / s`** column — the unit that compares a small document with a large one. A large document is only measured one at a time: under load, its duration would say more about the queue than about the document.
+
+Writing a 234-page dataset by hand is no fun, so `bench/grow-sample.mjs` does it. Give it a number of **pages** and the array to grow:
+
+```bash
+# at least 200 pages of invoice, growing d.products
+node bench/grow-sample.mjs samples/template_invoice_simple.json 200 d.products
+
+# the dataset is the array itself in this sample: grow `d`
+node bench/grow-sample.mjs samples/template_qrcode.json 200 d
+```
+
+It starts with as many entries as pages asked. It renders the PDF with Carbone, counts its pages, then raises the entry count until it passes the target.
+
+The file is named after the page count obtained.
+
+Added entries are copies of the first one, with random content: same shape, same types, same string lengths. Images become mono-color pictures — a solid PNG weighs a few hundred bytes; the original photo about 30 KB.
+
+The PDF stays in `.tmp/`, so you can check it. **Carbone must be running**: the page count is only known once the document is generated. Pages are counted on the DOCX with Carbone ICE. Use `--template` when several templates share the dataset, `--converter L` for another engine, `--port` for another server.
 
 ---
 
